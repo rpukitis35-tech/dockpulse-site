@@ -131,6 +131,8 @@
 </head>
 <body>
 
+<div id="checkoutBanner" style="display:none;position:sticky;top:0;z-index:100;text-align:center;padding:12px 16px;font-weight:bold;font-size:14px;"></div>
+
 <nav>
   <div class="wrap">
     <div class="brand"><span class="dot"></span> DockPulse</div>
@@ -233,7 +235,7 @@
           <li>Rule-based alerts</li>
           <li>Email support</li>
         </ul>
-        <a href="#contact" class="btn outline">Get Started</a>
+        <button type="button" class="btn outline" data-plan="starter" onclick="startCheckout('starter')">Subscribe — £299/mo</button>
       </div>
       <div class="plan popular">
         <div class="badge">MOST POPULAR</div>
@@ -248,9 +250,10 @@
           <li>Combine multiple WMS reports automatically</li>
           <li>Priority support</li>
         </ul>
-        <a href="#contact" class="btn">Get Started</a>
+        <button type="button" class="btn" data-plan="growth" onclick="startCheckout('growth')">Subscribe — £599/mo</button>
       </div>
     </div>
+    <p class="center" style="font-size:12px;color:var(--gray);margin-top:14px;">Secure card payment via Stripe. Cancel any time from your account.</p>
   </div>
 </section>
 
@@ -358,9 +361,19 @@ function updateNavAccountUI(user) {
   }
 }
 
+let pendingCheckoutPlan = null;
+
 if (window.netlifyIdentity) {
   netlifyIdentity.on('init', user => updateNavAccountUI(user));
-  netlifyIdentity.on('login', user => { updateNavAccountUI(user); netlifyIdentity.close(); });
+  netlifyIdentity.on('login', user => {
+    updateNavAccountUI(user);
+    netlifyIdentity.close();
+    if (pendingCheckoutPlan) {
+      const plan = pendingCheckoutPlan;
+      pendingCheckoutPlan = null;
+      startCheckout(plan);
+    }
+  });
   netlifyIdentity.on('logout', () => updateNavAccountUI(null));
   netlifyIdentity.init();
 
@@ -368,6 +381,58 @@ if (window.netlifyIdentity) {
   document.getElementById('navSignupBtn').addEventListener('click', (e) => { e.preventDefault(); netlifyIdentity.open('signup'); });
   document.getElementById('navLogoutBtn').addEventListener('click', (e) => { e.preventDefault(); netlifyIdentity.logout(); });
 }
+
+// --- Stripe checkout wiring ---
+async function startCheckout(plan) {
+  const user = window.netlifyIdentity && netlifyIdentity.currentUser();
+  if (!user) {
+    // Not logged in yet — remember which plan they picked, then have them sign up.
+    // Checkout resumes automatically once the 'login' event fires above.
+    pendingCheckoutPlan = plan;
+    netlifyIdentity.open('signup');
+    return;
+  }
+
+  const btn = document.querySelector(`button[data-plan="${plan}"]`);
+  const originalLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Redirecting to checkout…'; }
+
+  try {
+    const token = await user.jwt();
+    const resp = await fetch('/api/create-checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ plan }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.url) {
+      throw new Error(data.error || 'Could not start checkout.');
+    }
+    window.location.href = data.url;
+  } catch (err) {
+    alert('Sorry — we couldn\'t start checkout. ' + (err.message || 'Please try again or contact dockpulse@outlook.com.'));
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+  }
+}
+
+// --- Post-checkout banner (?checkout=success / ?checkout=cancelled) ---
+(function showCheckoutBanner() {
+  const params = new URLSearchParams(window.location.search);
+  const result = params.get('checkout');
+  if (!result) return;
+  const banner = document.getElementById('checkoutBanner');
+  if (result === 'success') {
+    banner.style.background = 'var(--teal)';
+    banner.style.color = '#fff';
+    banner.textContent = "🎉 You're subscribed! A receipt is on its way to your email. Head to My Dashboard to get started.";
+    banner.style.display = 'block';
+  } else if (result === 'cancelled') {
+    banner.style.background = '#fff3cd';
+    banner.style.color = '#664d03';
+    banner.textContent = 'Checkout was cancelled — no charge was made. Pick a plan below whenever you\'re ready.';
+    banner.style.display = 'block';
+  }
+})();
 </script>
 
 </body>
