@@ -889,7 +889,7 @@ function bindAssumptionInputs() {
   document.getElementById('asmCapacity').value = assumptions.capacity;
   document.getElementById('asmRent').value = assumptions.rent;
 
-  const bind = (id, key) => document.getElementById(id).addEventListener('change', e => {
+  const bind = (id, key) => document.getElementById(id).addEventListener('input', e => {
     assumptions[key] = Number(e.target.value) || 0;
     saveAssumptions();
     render();
