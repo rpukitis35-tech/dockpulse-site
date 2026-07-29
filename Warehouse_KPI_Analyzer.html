@@ -48,7 +48,8 @@
   .map-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:10px; }
   .map-field { display:flex; flex-direction:column; gap:4px; }
   .map-field label { font-size:11px; font-weight:bold; color:var(--gray); }
-  select, input[type=text] { font-family: Arial, sans-serif; font-size:12px; padding:6px; border:1px solid var(--border); border-radius:6px; background:#fff; }
+  select, input[type=text], input[type=number] { font-family: Arial, sans-serif; font-size:12px; padding:6px; border:1px solid var(--border); border-radius:6px; background:#fff; }
+  textarea { font-family: Arial, sans-serif; font-size:12px; padding:8px; border:1px solid var(--border); border-radius:6px; background:#fff; width:100%; resize:vertical; }
 
   .btn { background: var(--blue); color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:12px; font-weight:bold; cursor:pointer; }
   .btn:hover { background: var(--blue-dark); }
@@ -94,6 +95,16 @@
   .banner { background:#fff8e6; border:1px solid #f0d998; color:#7a5b00; border-radius:8px; padding:10px 14px; font-size:12px; margin-top:10px; display:none; }
   .account-bar { display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 16px; margin-bottom:16px; font-size:12.5px; color:var(--gray); flex-wrap:wrap; gap:8px; }
   .account-bar-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .calc-box { background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px; margin-top:14px; }
+  .calc-box .calc-title { font-weight:bold; font-size:13px; margin-bottom:8px; color:var(--blue-dark); }
+  .handover-form { display:grid; grid-template-columns: 160px 1fr; gap:10px; align-items:start; background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px; }
+  .handover-form .hf-actions { grid-column: 1 / -1; display:flex; justify-content:flex-end; }
+  .handover-list { margin-top:14px; display:flex; flex-direction:column; gap:10px; }
+  .handover-entry { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+  .handover-entry .hh { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#8a8a8a; margin-bottom:6px; }
+  .handover-entry .hh .shift-tag { background:var(--blue-light); color:var(--blue-dark); font-weight:bold; padding:2px 8px; border-radius:10px; font-size:10.5px; text-transform:uppercase; }
+  .handover-entry p { margin:0; font-size:13px; color:#222; white-space:pre-wrap; line-height:1.5; }
+  .handover-empty { font-size:12.5px; color:#8a8a8a; font-style:italic; }
 </style>
 </head>
 <body>
@@ -172,6 +183,62 @@
   </div>
   <p class="footnote">Data is saved automatically in this browser (persists on reload). "This Week" = most recent 7 rows below; "This Month" = all rows in the table. Nothing you upload leaves your browser &mdash; files are parsed locally.</p>
 
+  <div class="section-title">7. Cost &amp; Capacity Assumptions</div>
+  <p class="footnote">Set these once &mdash; they power the forecasting, staffing, and cost sections below, and are saved automatically in this browser.</p>
+  <div class="map-grid" style="margin-bottom:10px;">
+    <div class="map-field"><label>Hourly wage per staff (&pound;)</label><input type="number" id="asmWage" step="0.5" min="0"></div>
+    <div class="map-field"><label>Standard shift length (hours)</label><input type="number" id="asmShiftHours" step="0.5" min="0"></div>
+    <div class="map-field"><label>Overtime pay multiplier</label><input type="number" id="asmOtMult" step="0.1" min="1"></div>
+    <div class="map-field"><label>Standard orders / staff / shift</label><input type="number" id="asmCapacity" step="1" min="0"></div>
+    <div class="map-field"><label>Monthly rent / space cost (&pound;)</label><input type="number" id="asmRent" step="10" min="0"></div>
+  </div>
+
+  <div class="section-title">8. Forecasting</div>
+  <div class="kpi-grid" id="forecastGrid"></div>
+  <p class="footnote" id="forecastNote"></p>
+
+  <div class="section-title">9. Staffing &amp; Overtime Planning</div>
+  <div class="kpi-grid" id="staffingGrid"></div>
+  <div class="alerts" id="overtimeAlert" style="margin-top:10px;"></div>
+  <div class="calc-box">
+    <div class="calc-title">Quick calculator: staff needed for a target order volume</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:12px;color:var(--gray);">Orders per day:
+        <input type="number" id="calcOrders" style="width:110px;" value="500" min="0">
+      </label>
+      <span id="calcResult" style="font-size:13px;font-weight:bold;color:var(--blue-dark);"></span>
+    </div>
+  </div>
+
+  <div class="section-title">10. Cost Analysis</div>
+  <div class="kpi-grid" id="costGrid"></div>
+  <div class="charts" style="margin-top:12px;">
+    <div class="chart-card"><canvas id="costCompareChart"></canvas></div>
+  </div>
+
+  <div class="section-title">11. Shift Handover Notes</div>
+  <p class="footnote">Log what the next shift needs to know &mdash; backlog status, equipment issues, staffing changes, anything unfinished.</p>
+  <div class="handover-form">
+    <div class="map-field">
+      <label>Shift</label>
+      <select id="hoShift">
+        <option>Morning</option>
+        <option>Afternoon</option>
+        <option>Night</option>
+      </select>
+      <label style="margin-top:8px;">Your name (optional)</label>
+      <input type="text" id="hoAuthor" placeholder="e.g. Alex">
+    </div>
+    <div class="map-field">
+      <label>Handover note</label>
+      <textarea id="hoNote" rows="3" placeholder="What does the next shift need to know?"></textarea>
+    </div>
+    <div class="hf-actions">
+      <button class="btn" id="hoAddBtn">Add Handover Note</button>
+    </div>
+  </div>
+  <div class="handover-list" id="handoverList"></div>
+
 </div>
 
 <script>
@@ -205,8 +272,29 @@ function loadBacklog() { const raw = localStorage.getItem(STORAGE_BACKLOG); retu
 function saveBacklog() { localStorage.setItem(STORAGE_BACKLOG, String(state.startBacklog)); }
 
 const state = { days: loadData(), startBacklog: loadBacklog() };
-let ioChart, backlogChart;
+let ioChart, backlogChart, costChart;
 let importedFiles = []; // {name, rows, headers, kind, mapping}
+
+/* ============================== ASSUMPTIONS (cost & capacity) ============================== */
+const ASSUMPTIONS_KEY = 'warehouseKpiAssumptions_v1';
+function defaultAssumptions() { return { wage: 15, shiftHours: 8, otMult: 1.5, capacity: 40, rent: 4000 }; }
+function loadAssumptions() {
+  const raw = localStorage.getItem(ASSUMPTIONS_KEY);
+  if (raw) { try { return Object.assign(defaultAssumptions(), JSON.parse(raw)); } catch (e) {} }
+  return defaultAssumptions();
+}
+function saveAssumptions() { localStorage.setItem(ASSUMPTIONS_KEY, JSON.stringify(assumptions)); }
+let assumptions = loadAssumptions();
+
+/* ============================== SHIFT HANDOVER NOTES ============================== */
+const HANDOVER_KEY = 'warehouseKpiHandover_v1';
+function loadHandover() {
+  const raw = localStorage.getItem(HANDOVER_KEY);
+  if (raw) { try { return JSON.parse(raw); } catch (e) {} }
+  return [];
+}
+function saveHandover() { localStorage.setItem(HANDOVER_KEY, JSON.stringify(state.handoverNotes)); }
+state.handoverNotes = loadHandover();
 
 /* ============================== HELPERS ============================== */
 function fmt(n, digits=0) {
@@ -550,7 +638,10 @@ function computeBacklogs() {
   return state.days.map(d => { running = running + (Number(d.received)||0) - (Number(d.processed)||0); return running; });
 }
 
-function render() { renderTable(); renderKpis(); renderAlerts(); renderCharts(); }
+function render() {
+  renderTable(); renderKpis(); renderAlerts(); renderCharts();
+  renderForecast(); renderStaffing(); renderCost(); renderHandover();
+}
 
 function renderTable() {
   document.getElementById('startBacklog').value = state.startBacklog;
@@ -667,6 +758,199 @@ function renderCharts() {
   ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ title:{ display:true, text:'Backlog Trend'} } } });
 }
 
+/* ============================== FORECASTING ============================== */
+function linreg(values) {
+  const n = values.length;
+  if (!n) return { slope: 0, intercept: 0 };
+  if (n === 1) return { slope: 0, intercept: values[0] };
+  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+  for (let i = 0; i < n; i++) { sumX += i; sumY += values[i]; sumXY += i * values[i]; sumXX += i * i; }
+  const denom = n * sumXX - sumX * sumX;
+  const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
+function forecastAt(reg, i) { return reg.intercept + reg.slope * i; }
+
+function renderForecast() {
+  const grid = document.getElementById('forecastGrid');
+  const note = document.getElementById('forecastNote');
+  const n = state.days.length;
+  if (n < 3) {
+    grid.innerHTML = '';
+    note.textContent = 'Add at least 3 days of data to generate a forecast.';
+    return;
+  }
+  const processedSeries = state.days.map(d => Number(d.processed) || 0);
+  const backlogSeries = computeBacklogs();
+  const ordersReg = linreg(processedSeries);
+  const backlogReg = linreg(backlogSeries);
+
+  let next7 = 0, next30 = 0;
+  for (let i = n; i < n + 7; i++) next7 += Math.max(0, forecastAt(ordersReg, i));
+  for (let i = n; i < n + 30; i++) next30 += Math.max(0, forecastAt(ordersReg, i));
+
+  const currentBacklog = backlogSeries[n - 1];
+  const backlog7 = Math.max(0, forecastAt(backlogReg, n + 6));
+  const backlog30 = Math.max(0, forecastAt(backlogReg, n + 29));
+
+  grid.innerHTML = [
+    kpiCard('Projected Orders (Next 7 Days)', fmt(next7), 'based on recent trend'),
+    kpiCard('Projected Orders (Next 30 Days)', fmt(next30), 'based on recent trend'),
+    kpiCard('Projected Backlog (in 7 Days)', fmt(backlog7), 'if current trend continues', backlog7 > currentBacklog ? 'warn' : 'ok'),
+    kpiCard('Projected Backlog (in 30 Days)', fmt(backlog30), 'if current trend continues', backlog30 > currentBacklog ? 'warn' : 'ok'),
+  ].join('');
+
+  const trend = backlogReg.slope > 0.5 ? 'rising' : (backlogReg.slope < -0.5 ? 'falling' : 'roughly flat');
+  note.textContent = `Backlog trend is ${trend} (${backlogReg.slope >= 0 ? '+' : ''}${fmt(backlogReg.slope, 1)}/day). This is a simple trend projection from your last ${n} day(s) of data — treat it as a directional signal, not a guarantee.`;
+}
+
+/* ============================== STAFFING & OVERTIME ============================== */
+function updateCalc() {
+  const target = Number(document.getElementById('calcOrders').value) || 0;
+  const cap = assumptions.capacity > 0 ? assumptions.capacity : 1;
+  const needed = Math.ceil(target / cap);
+  document.getElementById('calcResult').textContent = `≈ ${needed} staff needed at ${fmt(assumptions.capacity)} orders/staff/shift.`;
+}
+
+function renderStaffing() {
+  const days = state.days; const n = days.length;
+  const sum = (arr, f) => arr.reduce((s, d) => s + (Number(d[f]) || 0), 0);
+  const avgOrdersDay = n ? sum(days, 'processed') / n : 0;
+  const avgStaffPresent = n ? sum(days, 'staffPresent') / n : 0;
+  const capacity = assumptions.capacity;
+  const actualPerStaff = avgStaffPresent > 0 ? avgOrdersDay / avgStaffPresent : 0;
+  const recommendedStaff = capacity > 0 ? Math.ceil(avgOrdersDay / capacity) : 0;
+  const gap = recommendedStaff - Math.round(avgStaffPresent);
+
+  document.getElementById('staffingGrid').innerHTML = [
+    kpiCard('Avg Orders / Staff / Day (actual)', fmt(actualPerStaff, 1), `capacity benchmark: ${fmt(capacity)}`, actualPerStaff > capacity ? 'warn' : 'ok'),
+    kpiCard('Avg Staff Present', fmt(avgStaffPresent, 1), 'current average'),
+    kpiCard('Recommended Staff', fmt(recommendedStaff), `at ${fmt(capacity)} orders/staff/shift`),
+    kpiCard('Staffing Gap', (gap > 0 ? '+' : '') + fmt(gap), gap > 0 ? 'understaffed vs. recommended' : 'staffing covers demand', gap > 0 ? 'warn' : 'ok'),
+  ].join('');
+
+  const overtimeNeeded = capacity > 0 && actualPerStaff > capacity;
+  document.getElementById('overtimeAlert').innerHTML = overtimeNeeded
+    ? `<div class="alert warn">⚠ Overtime likely needed — staff are averaging ${fmt(actualPerStaff, 1)} orders/day vs. your ${fmt(capacity)} standard capacity. ${gap > 0 ? `Consider adding ~${gap} staff` : 'Consider authorizing overtime'} to close the gap.</div>`
+    : `<div class="alert ok">✓ No overtime expected — current staffing covers the workload within standard capacity (${fmt(capacity)} orders/staff/shift).</div>`;
+
+  updateCalc();
+}
+
+/* ============================== COST ANALYSIS ============================== */
+function renderCost() {
+  const days = state.days; const n = days.length;
+  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, capacity = assumptions.capacity, rent = assumptions.rent;
+
+  let totalLabor = 0, totalOvertime = 0, totalProcessed = 0;
+  days.forEach(d => {
+    const staff = Number(d.staffPresent) || 0;
+    const processed = Number(d.processed) || 0;
+    totalProcessed += processed;
+    const perStaff = staff > 0 ? processed / staff : 0;
+    let overtimeHours = 0;
+    if (capacity > 0 && perStaff > capacity) {
+      const excessRatio = (perStaff - capacity) / capacity;
+      overtimeHours = shiftHours * excessRatio;
+    }
+    const regularCost = staff * shiftHours * wage;
+    const overtimeCost = staff * overtimeHours * wage * otMult;
+    totalLabor += regularCost + overtimeCost;
+    totalOvertime += overtimeCost;
+  });
+
+  const rentAllocated = n > 0 ? rent * (n / 30) : 0;
+  const costPerUnit = totalProcessed > 0 ? totalLabor / totalProcessed : 0;
+  const costPerUnitWithRent = totalProcessed > 0 ? (totalLabor + rentAllocated) / totalProcessed : 0;
+
+  document.getElementById('costGrid').innerHTML = [
+    kpiCard('Total Labor Cost (period)', '£' + fmt(totalLabor)),
+    kpiCard('Est. Overtime Cost (period)', '£' + fmt(totalOvertime), 'portion of labor cost above'),
+    kpiCard('Cost / Unit — Labor Only', '£' + fmt(costPerUnit, 2)),
+    kpiCard('Cost / Unit — incl. Rent', '£' + fmt(costPerUnitWithRent, 2)),
+    kpiCard('Rent Allocated (period)', '£' + fmt(rentAllocated), `${fmt(n)} day(s) of £${fmt(rent)}/mo`),
+    kpiCard('Monthly Rent / Space Cost', '£' + fmt(rent), 'as entered above'),
+  ].join('');
+
+  const ctx = document.getElementById('costCompareChart');
+  if (costChart) costChart.destroy();
+  costChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: ['Labor Cost (period)', 'Rent Allocated (period)'], datasets: [{ label: 'Cost (£)', data: [totalLabor, rentAllocated], backgroundColor: ['#2e75b6', '#c0392b'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Labor vs. Rent/Space Cost' } } }
+  });
+}
+
+function bindAssumptionInputs() {
+  document.getElementById('asmWage').value = assumptions.wage;
+  document.getElementById('asmShiftHours').value = assumptions.shiftHours;
+  document.getElementById('asmOtMult').value = assumptions.otMult;
+  document.getElementById('asmCapacity').value = assumptions.capacity;
+  document.getElementById('asmRent').value = assumptions.rent;
+
+  const bind = (id, key) => document.getElementById(id).addEventListener('change', e => {
+    assumptions[key] = Number(e.target.value) || 0;
+    saveAssumptions();
+    render();
+  });
+  bind('asmWage', 'wage');
+  bind('asmShiftHours', 'shiftHours');
+  bind('asmOtMult', 'otMult');
+  bind('asmCapacity', 'capacity');
+  bind('asmRent', 'rent');
+
+  document.getElementById('calcOrders').addEventListener('input', updateCalc);
+}
+bindAssumptionInputs();
+
+/* ============================== SHIFT HANDOVER NOTES ============================== */
+function renderHandover() {
+  const list = document.getElementById('handoverList');
+  const notes = state.handoverNotes || [];
+  if (!notes.length) {
+    list.innerHTML = '<div class="handover-empty">No handover notes yet — add one above for the next shift.</div>';
+    return;
+  }
+  const sorted = notes.slice().sort((a, b) => b.ts.localeCompare(a.ts));
+  list.innerHTML = sorted.map(entry => {
+    const when = new Date(entry.ts);
+    const whenStr = isNaN(when) ? entry.ts : when.toLocaleString();
+    return `<div class="handover-entry" data-id="${entry.id}">
+      <div class="hh">
+        <span><span class="shift-tag">${entry.shift}</span> &nbsp; ${entry.author ? entry.author + ' — ' : ''}${whenStr}</span>
+        <button class="del-btn" data-id="${entry.id}" title="Delete note">&times;</button>
+      </div>
+      <p>${entry.note.replace(/</g, '&lt;')}</p>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const id = e.target.dataset.id;
+      state.handoverNotes = state.handoverNotes.filter(x => x.id !== id);
+      saveHandover();
+      renderHandover();
+    });
+  });
+}
+
+document.getElementById('hoAddBtn').addEventListener('click', () => {
+  const note = document.getElementById('hoNote').value.trim();
+  if (!note) return;
+  const entry = {
+    id: Math.random().toString(36).slice(2),
+    ts: new Date().toISOString(),
+    shift: document.getElementById('hoShift').value,
+    author: document.getElementById('hoAuthor').value.trim(),
+    note
+  };
+  state.handoverNotes = state.handoverNotes || [];
+  state.handoverNotes.push(entry);
+  saveHandover();
+  document.getElementById('hoNote').value = '';
+  renderHandover();
+});
+
 document.getElementById('addRowBtn').addEventListener('click', () => {
   const last = state.days[state.days.length-1];
   const d = last ? new Date(last.date) : new Date();
@@ -773,6 +1057,11 @@ async function loadAccountData(silent) {
       if (!silent) showBanner((data && data.error) || 'Could not load your saved data.', true);
       return;
     }
+    if (Array.isArray(data.handoverNotes)) {
+      state.handoverNotes = data.handoverNotes;
+      saveHandover();
+      renderHandover();
+    }
     if (Array.isArray(data.days) && data.days.length) {
       state.days = data.days;
       saveData();
@@ -788,7 +1077,7 @@ async function loadAccountData(silent) {
 
 async function saveAccountData() {
   try {
-    const resp = await identityFetch('/api/company-data', { method: 'POST', body: JSON.stringify({ days: state.days }) });
+    const resp = await identityFetch('/api/company-data', { method: 'POST', body: JSON.stringify({ days: state.days, handoverNotes: state.handoverNotes }) });
     const data = await resp.json().catch(() => null);
     if (!resp.ok || !data || data.error) {
       showBanner((data && data.error) || 'Could not save your data.', true);
