@@ -37,6 +37,8 @@
   .brand .dot { width:12px; height:12px; border-radius:50%; background: linear-gradient(135deg, var(--teal), var(--blue)); }
   .nav-links { display:flex; gap:24px; font-size:14px; font-weight:bold; }
   .nav-links a:hover { color: var(--teal-dark); }
+  .nav-account { display:flex; align-items:center; gap:10px; }
+  .nav-account .acct-email { font-size:12.5px; color: var(--gray); max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .btn { display:inline-block; background: var(--teal); color:#fff; border:none; border-radius:8px; padding:12px 22px; font-size:14px; font-weight:bold; cursor:pointer; text-decoration:none; }
   .btn:hover { background: var(--teal-dark); }
   .btn.outline { background:#fff; color: var(--blue-dark); border:1px solid var(--border); }
@@ -87,6 +89,12 @@
   .plan li { font-size:13.5px; padding: 7px 0; border-bottom: 1px solid #f0f4f8; color:#334; }
   .plan li:before { content: "✓ "; color: var(--teal-dark); font-weight:bold; }
 
+  /* ABOUT */
+  .about-grid { display:grid; grid-template-columns: repeat(3,1fr); gap:20px; margin-top:32px; }
+  .about-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px; }
+  .about-card h3 { font-size:15px; margin-bottom:8px; }
+  .about-card p { font-size:13.5px; color: var(--gray); line-height:1.55; margin:0; }
+
   /* FAQ */
   .faq-item { border-bottom:1px solid var(--border); padding: 18px 0; }
   .faq-item summary { cursor:pointer; font-weight:bold; font-size:14.5px; color: var(--blue-dark); list-style:none; }
@@ -112,12 +120,14 @@
   .disclaimer-banner { background:#fff8e6; border-bottom:1px solid #f0d998; color:#7a5b00; font-size:12px; text-align:center; padding:8px 16px; }
 
   @media (max-width: 860px) {
-    .grid, .steps, .pricing-grid { grid-template-columns: 1fr; }
+    .grid, .steps, .pricing-grid, .about-grid { grid-template-columns: 1fr; }
     .contact-box { grid-template-columns: 1fr; }
     .hero h1 { font-size: 30px; }
     .nav-links { display:none; }
+    .nav-account .acct-email { display:none; }
   }
 </style>
+<script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 </head>
 <body>
 
@@ -128,9 +138,18 @@
       <a href="#features">Features</a>
       <a href="#demo">Try DockPulse</a>
       <a href="#pricing">Pricing</a>
+      <a href="#about">About</a>
       <a href="#faq">FAQ</a>
     </div>
-    <a href="#contact" class="btn small">Get Started</a>
+    <div class="nav-account" id="navLoggedOut">
+      <a href="#" class="btn outline small" id="navLoginBtn">Log In</a>
+      <a href="#" class="btn small" id="navSignupBtn">Sign Up</a>
+    </div>
+    <div class="nav-account" id="navLoggedIn" style="display:none;">
+      <span class="acct-email" id="navAcctEmail"></span>
+      <a href="Warehouse_KPI_Analyzer.html" class="btn small">My Dashboard</a>
+      <a href="#" class="btn outline small" id="navLogoutBtn">Log Out</a>
+    </div>
   </div>
 </nav>
 
@@ -231,6 +250,20 @@
   </div>
 </section>
 
+<section id="about">
+  <div class="wrap">
+    <div class="eyebrow center">About Us</div>
+    <h2 class="center">Built by people who've stood on a loud warehouse floor at 6am</h2>
+    <p class="lead center">DockPulse started with a simple frustration: warehouse teams already have all the data they need to run a tight operation — it's just scattered across receiving logs, shipping manifests, and shift reports that nobody has time to stitch together every morning. We built DockPulse so that step takes minutes, not hours, and so the numbers come with a plain-English read on what actually needs attention today.</p>
+    <p class="lead center">We're a small, ops-obsessed team focused on one job: turning the exports your WMS already produces into a KPI view you can trust, without a multi-month integration project. If you're tired of rebuilding yesterday's numbers by hand, we built this for you.</p>
+    <div class="about-grid">
+      <div class="about-card"><h3>Founder-led</h3><p>DockPulse is built and supported directly by its founding team — when you email us, you're talking to the people who build the product.</p></div>
+      <div class="about-card"><h3>Privacy by default</h3><p>The analyzer runs in your browser. Your WMS exports are never required to leave your machine unless you choose to save them to your account.</p></div>
+      <div class="about-card"><h3>Built for ops, not IT</h3><p>No integration project, no data warehouse, no BI team required — if you can export a CSV, you can use DockPulse today.</p></div>
+    </div>
+  </div>
+</section>
+
 <section class="section-alt" id="faq">
   <div class="wrap">
     <div class="eyebrow center">FAQ</div>
@@ -301,6 +334,32 @@ document.getElementById('leadForm').addEventListener('submit', function(e){
   );
   window.location.href = `mailto:dockpulse@outlook.com?subject=${subject}&body=${body}`;
 });
+
+// --- Account / Netlify Identity wiring ---
+function updateNavAccountUI(user) {
+  const loggedOut = document.getElementById('navLoggedOut');
+  const loggedIn = document.getElementById('navLoggedIn');
+  const emailEl = document.getElementById('navAcctEmail');
+  if (user) {
+    loggedOut.style.display = 'none';
+    loggedIn.style.display = 'flex';
+    emailEl.textContent = user.email || '';
+  } else {
+    loggedOut.style.display = 'flex';
+    loggedIn.style.display = 'none';
+  }
+}
+
+if (window.netlifyIdentity) {
+  netlifyIdentity.on('init', user => updateNavAccountUI(user));
+  netlifyIdentity.on('login', user => { updateNavAccountUI(user); netlifyIdentity.close(); });
+  netlifyIdentity.on('logout', () => updateNavAccountUI(null));
+  netlifyIdentity.init();
+
+  document.getElementById('navLoginBtn').addEventListener('click', (e) => { e.preventDefault(); netlifyIdentity.open('login'); });
+  document.getElementById('navSignupBtn').addEventListener('click', (e) => { e.preventDefault(); netlifyIdentity.open('signup'); });
+  document.getElementById('navLogoutBtn').addEventListener('click', (e) => { e.preventDefault(); netlifyIdentity.logout(); });
+}
 </script>
 
 </body>
