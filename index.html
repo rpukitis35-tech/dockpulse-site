@@ -76,6 +76,13 @@
   iframe.demo { width:100%; height: 640px; border:none; display:block; }
   .demo-fallback { padding: 40px; text-align:center; color: var(--gray); font-size: 13px; }
 
+  /* TUTORIAL */
+  .tutorial-grid { display:grid; grid-template-columns: repeat(2,1fr); gap:28px; margin-top:32px; }
+  .tutorial-card { background:#fff; border:1px solid var(--border); border-radius:14px; padding:16px; }
+  .tutorial-card img { width:100%; display:block; border-radius:10px; border:1px solid var(--border); }
+  .tutorial-card h3 { font-size:15px; margin: 14px 0 6px; }
+  .tutorial-card p { font-size:13px; color: var(--gray); margin:0; line-height:1.55; }
+
   /* PRICING */
   .pricing-grid { display:grid; grid-template-columns: repeat(2,1fr); max-width: 720px; margin-left:auto; margin-right:auto; gap:20px; margin-top:36px; align-items: stretch; }
   .plan { background:#fff; border:1px solid var(--border); border-radius:14px; padding: 28px 24px; display:flex; flex-direction:column; }
@@ -120,7 +127,7 @@
   .disclaimer-banner { background:#fff8e6; border-bottom:1px solid #f0d998; color:#7a5b00; font-size:12px; text-align:center; padding:8px 16px; }
 
   @media (max-width: 860px) {
-    .grid, .steps, .pricing-grid, .about-grid { grid-template-columns: 1fr; }
+    .grid, .steps, .pricing-grid, .about-grid, .tutorial-grid { grid-template-columns: 1fr; }
     .contact-box { grid-template-columns: 1fr; }
     .hero h1 { font-size: 30px; }
     .nav-links { display:none; }
@@ -139,6 +146,7 @@
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#demo">Try DockPulse</a>
+      <a href="#tutorial">Tutorial</a>
       <a href="#pricing">Pricing</a>
       <a href="#about">About</a>
       <a href="#faq">FAQ</a>
@@ -212,6 +220,26 @@
         <a href="Warehouse_KPI_Analyzer.html" target="_blank" style="color:#fff;">Open Full Screen ↗</a>
       </div>
       <iframe class="demo" src="Warehouse_KPI_Analyzer.html" title="DockPulse Warehouse KPI Analyzer" onerror="this.style.display='none'"></iframe>
+    </div>
+  </div>
+</section>
+
+<section id="tutorial">
+  <div class="wrap">
+    <div class="eyebrow center">Tutorial</div>
+    <h2 class="center">See DockPulse in action</h2>
+    <p class="lead center">Two short walkthroughs, recorded directly from the live product — no mockups.</p>
+    <div class="tutorial-grid">
+      <div class="tutorial-card">
+        <img src="media/dockpulse-website-tour.gif" alt="Tour of the DockPulse website: features, pricing, and how it works" loading="lazy">
+        <h3>1. The website tour</h3>
+        <p>Hero, core features, pricing plans, and FAQ — what a new visitor sees before signing up.</p>
+      </div>
+      <div class="tutorial-card">
+        <img src="media/dockpulse-analyzer-tour.gif" alt="Tour of the DockPulse Warehouse KPI Analyzer tool: uploading files, KPIs, forecasting, staffing, and cost analysis" loading="lazy">
+        <h3>2. The analyzer tool</h3>
+        <p>Uploading WMS files, key metrics, alerts, AI insights, forecasting, staffing, cost analysis, and shift handover notes.</p>
+      </div>
     </div>
   </div>
 </section>
