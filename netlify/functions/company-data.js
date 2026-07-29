@@ -1,6 +1,7 @@
 // Netlify serverless function: lets a logged-in DockPulse user save and
-// retrieve their own warehouse KPI data (the daily rows from the analyzer),
-// so it's there again next time they log in from any device.
+// retrieve their own warehouse KPI data (the daily rows from the analyzer)
+// and shift handover notes, so it's there again next time they log in from
+// any device.
 //
 // Auth: relies on Netlify Identity. The browser sends the user's Identity
 // JWT as `Authorization: Bearer <token>`; getUser() verifies it and returns
@@ -32,6 +33,7 @@ export default async (req, context) => {
       const record = await store.get(user.id, { type: "json" });
       return jsonResponse(200, {
         days: (record && record.days) || [],
+        handoverNotes: (record && record.handoverNotes) || [],
         savedAt: (record && record.savedAt) || null,
         email: user.email,
       });
@@ -52,9 +54,10 @@ export default async (req, context) => {
     if (!Array.isArray(days)) {
       return jsonResponse(400, { error: "Expected { days: [...] } — an array of daily KPI rows." });
     }
+    const handoverNotes = Array.isArray(body && body.handoverNotes) ? body.handoverNotes : [];
 
     try {
-      await store.setJSON(user.id, { days, savedAt: new Date().toISOString(), email: user.email });
+      await store.setJSON(user.id, { days, handoverNotes, savedAt: new Date().toISOString(), email: user.email });
       return jsonResponse(200, { ok: true, saved: days.length });
     } catch (err) {
       return jsonResponse(500, { error: "Could not save your data.", detail: String(err) });
