@@ -5,6 +5,7 @@
   "description": "DockPulse marketing site + serverless functions",
   "dependencies": {
     "@netlify/identity": "1.2.0",
-    "@netlify/blobs": "10.7.9"
+    "@netlify/blobs": "10.7.9",
+    "stripe": "17.5.0"
   }
 }
