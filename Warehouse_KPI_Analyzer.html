@@ -5,6 +5,7 @@
 <title>DockPulse — Warehouse KPI Analyzer</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 <style>
   :root {
     color-scheme: light;
@@ -91,6 +92,8 @@
   .table-wrap { overflow-x:auto; }
   .footnote { font-size:11px; color:#8a8a8a; margin-top:6px; }
   .banner { background:#fff8e6; border:1px solid #f0d998; color:#7a5b00; border-radius:8px; padding:10px 14px; font-size:12px; margin-top:10px; display:none; }
+  .account-bar { display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 16px; margin-bottom:16px; font-size:12.5px; color:var(--gray); flex-wrap:wrap; gap:8px; }
+  .account-bar-actions { display:flex; gap:8px; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -99,6 +102,17 @@
   <div class="header">
     <h1>DockPulse — Warehouse KPI Analyzer</h1>
     <p>Drop in exports from your WMS &mdash; the dashboard auto-detects columns, computes inbound / outbound / staffing / orders-left-to-process / averages, and flags issues automatically.</p>
+  </div>
+
+  <div class="account-bar" id="accountBar">
+    <span id="acctStatus">Checking sign-in status&hellip;</span>
+    <span class="account-bar-actions">
+      <button class="btn secondary" id="loginBtn" style="display:none;">Log In</button>
+      <button class="btn secondary" id="signupBtn" style="display:none;">Sign Up</button>
+      <button class="btn secondary" id="loadAccountBtn" style="display:none;">Load My Saved Data</button>
+      <button class="btn secondary" id="saveAccountBtn" style="display:none;">Save to My Account</button>
+      <button class="btn secondary" id="logoutBtn" style="display:none;">Log Out</button>
+    </span>
   </div>
 
   <div class="section-title">1. Import Your WMS Files</div>
@@ -717,6 +731,89 @@ Keep it under 180 words, no markdown headers, plain prose with short paragraphs 
     btn.disabled = false;
   }
 });
+
+/* ============================== ACCOUNT (Netlify Identity + saved data) ============================== */
+function updateAccountUI(user) {
+  const status = document.getElementById('acctStatus');
+  const loginBtn = document.getElementById('loginBtn');
+  const signupBtn = document.getElementById('signupBtn');
+  const saveBtn = document.getElementById('saveAccountBtn');
+  const loadBtn = document.getElementById('loadAccountBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (user) {
+    status.textContent = `Signed in as ${user.email} — you can save this data to your account.`;
+    loginBtn.style.display = 'none';
+    signupBtn.style.display = 'none';
+    saveBtn.style.display = 'inline-block';
+    loadBtn.style.display = 'inline-block';
+    logoutBtn.style.display = 'inline-block';
+  } else {
+    status.textContent = 'Not signed in — log in or sign up to save your data to your account and see it again from any device.';
+    loginBtn.style.display = 'inline-block';
+    signupBtn.style.display = 'inline-block';
+    saveBtn.style.display = 'none';
+    loadBtn.style.display = 'none';
+    logoutBtn.style.display = 'none';
+  }
+}
+
+async function identityFetch(path, opts) {
+  const user = netlifyIdentity.currentUser();
+  if (!user) throw new Error('Not signed in.');
+  const token = await user.jwt();
+  const headers = Object.assign({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, (opts && opts.headers) || {});
+  return fetch(path, Object.assign({}, opts, { headers }));
+}
+
+async function loadAccountData(silent) {
+  try {
+    const resp = await identityFetch('/api/company-data', { method: 'GET' });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok || !data) {
+      if (!silent) showBanner((data && data.error) || 'Could not load your saved data.', true);
+      return;
+    }
+    if (Array.isArray(data.days) && data.days.length) {
+      state.days = data.days;
+      saveData();
+      render();
+      if (!silent) showBanner(`Loaded ${data.days.length} saved day(s) from your account.`, false);
+    } else if (!silent) {
+      showBanner('No saved data in your account yet — click "Save to My Account" once you have data below.', false);
+    }
+  } catch (err) {
+    if (!silent) showBanner(`Could not load your saved data: ${err.message}`, true);
+  }
+}
+
+async function saveAccountData() {
+  try {
+    const resp = await identityFetch('/api/company-data', { method: 'POST', body: JSON.stringify({ days: state.days }) });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok || !data || data.error) {
+      showBanner((data && data.error) || 'Could not save your data.', true);
+      return;
+    }
+    showBanner(`Saved ${data.saved} day(s) to your account.`, false);
+  } catch (err) {
+    showBanner(`Could not save your data: ${err.message}`, true);
+  }
+}
+
+if (window.netlifyIdentity) {
+  netlifyIdentity.on('init', user => { updateAccountUI(user); if (user) loadAccountData(true); });
+  netlifyIdentity.on('login', user => { updateAccountUI(user); netlifyIdentity.close(); loadAccountData(true); });
+  netlifyIdentity.on('logout', () => updateAccountUI(null));
+  netlifyIdentity.init();
+
+  document.getElementById('loginBtn').addEventListener('click', () => netlifyIdentity.open('login'));
+  document.getElementById('signupBtn').addEventListener('click', () => netlifyIdentity.open('signup'));
+  document.getElementById('logoutBtn').addEventListener('click', () => netlifyIdentity.logout());
+  document.getElementById('saveAccountBtn').addEventListener('click', saveAccountData);
+  document.getElementById('loadAccountBtn').addEventListener('click', () => loadAccountData(false));
+} else {
+  document.getElementById('acctStatus').textContent = 'Account sign-in is unavailable right now.';
+}
 
 render();
 </script>
