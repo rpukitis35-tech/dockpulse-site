@@ -87,11 +87,6 @@
   .plan li { font-size:13.5px; padding: 7px 0; border-bottom: 1px solid #f0f4f8; color:#334; }
   .plan li:before { content: "✓ "; color: var(--teal-dark); font-weight:bold; }
 
-  /* TESTIMONIALS */
-  .testimonials { display:grid; grid-template-columns: repeat(3,1fr); gap:20px; margin-top:32px; }
-  .testimonial { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px; font-size:13.5px; color:#334; line-height:1.6; }
-  .testimonial .who { margin-top:14px; font-size:12px; color: var(--gray); font-weight:bold; }
-
   /* FAQ */
   .faq-item { border-bottom:1px solid var(--border); padding: 18px 0; }
   .faq-item summary { cursor:pointer; font-weight:bold; font-size:14.5px; color: var(--blue-dark); list-style:none; }
@@ -117,7 +112,7 @@
   .disclaimer-banner { background:#fff8e6; border-bottom:1px solid #f0d998; color:#7a5b00; font-size:12px; text-align:center; padding:8px 16px; }
 
   @media (max-width: 860px) {
-    .grid, .steps, .pricing-grid, .testimonials { grid-template-columns: 1fr; }
+    .grid, .steps, .pricing-grid { grid-template-columns: 1fr; }
     .contact-box { grid-template-columns: 1fr; }
     .hero h1 { font-size: 30px; }
     .nav-links { display:none; }
@@ -126,14 +121,12 @@
 </head>
 <body>
 
-<div class="disclaimer-banner">Note: the testimonials further down this page are illustrative examples, not real customer quotes — replace them once you have actual customers.</div>
-
 <nav>
   <div class="wrap">
     <div class="brand"><span class="dot"></span> DockPulse</div>
     <div class="nav-links">
       <a href="#features">Features</a>
-      <a href="#demo">Live Demo</a>
+      <a href="#demo">Try DockPulse</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>
     </div>
@@ -147,7 +140,7 @@
     <h1>Turn your WMS exports into a live performance pulse.</h1>
     <p class="lead">Upload the reports your warehouse management system already produces. DockPulse auto-detects the columns, computes your inbound, outbound, staffing, and order-backlog KPIs, and has AI write the operational briefing — no integration project required.</p>
     <div class="hero-ctas">
-      <a href="#demo" class="btn">Try the Live Demo</a>
+      <a href="#demo" class="btn">Try DockPulse Free</a>
       <a href="#pricing" class="btn outline">See Pricing</a>
     </div>
     <div class="hero-stats">
@@ -188,15 +181,15 @@
 
 <section id="demo">
   <div class="wrap">
-    <div class="eyebrow center">See It In Action</div>
-    <h2 class="center">Live, interactive demo — pre-loaded with sample data</h2>
-    <p class="lead center">This is the actual product. Upload your own file, or just explore the sample data already loaded below.</p>
+    <div class="eyebrow center">Try It Now</div>
+    <h2 class="center">Analyze your warehouse data right now</h2>
+    <p class="lead center">Upload your own WMS export below to get your KPI dashboard in minutes — or explore first with the sample data already loaded.</p>
     <div class="demo-frame-wrap">
       <div class="demo-frame-header">
         <span>DockPulse — Warehouse KPI Analyzer</span>
         <a href="Warehouse_KPI_Analyzer.html" target="_blank" style="color:#fff;">Open Full Screen ↗</a>
       </div>
-      <iframe class="demo" src="Warehouse_KPI_Analyzer.html" title="DockPulse Demo" onerror="this.style.display='none'"></iframe>
+      <iframe class="demo" src="Warehouse_KPI_Analyzer.html" title="DockPulse Warehouse KPI Analyzer" onerror="this.style.display='none'"></iframe>
     </div>
   </div>
 </section>
@@ -238,18 +231,6 @@
   </div>
 </section>
 
-<section id="testimonials-section">
-  <div class="wrap">
-    <div class="eyebrow center">Illustrative Example Quotes — Replace With Real Customers</div>
-    <h2 class="center">What operations teams could say</h2>
-    <div class="testimonials">
-      <div class="testimonial">"We used to spend the first hour of every shift re-building yesterday's numbers by hand. Now it's already waiting for us."<div class="who">— Operations Manager, mid-size 3PL (example)</div></div>
-      <div class="testimonial">"The backlog alert caught a staffing gap two days before it would have shown up in our on-time metrics."<div class="who">— Warehouse Director, regional distributor (example)</div></div>
-      <div class="testimonial">"No integration project, no IT ticket — we just dropped in the same reports we already export every day."<div class="who">— VP of Operations, e-commerce fulfillment (example)</div></div>
-    </div>
-  </div>
-</section>
-
 <section class="section-alt" id="faq">
   <div class="wrap">
     <div class="eyebrow center">FAQ</div>
@@ -257,7 +238,7 @@
     <div style="max-width:720px;margin:24px auto 0;">
       <details class="faq-item">
         <summary>Does my data leave our systems?</summary>
-        <p>The demo above runs entirely in your browser — files are parsed locally and nothing is uploaded to a server. A hosted, multi-user version would process files server-side under whatever data agreement you put in place.</p>
+        <p>No. DockPulse runs entirely in your browser — files are parsed locally and nothing is uploaded to a server.</p>
       </details>
       <details class="faq-item">
         <summary>Which WMS systems are supported?</summary>
