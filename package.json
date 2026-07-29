@@ -1,0 +1,10 @@
+{
+  "name": "dockpulse-site",
+  "private": true,
+  "version": "1.0.0",
+  "description": "DockPulse marketing site + serverless functions",
+  "dependencies": {
+    "@netlify/identity": "1.2.0",
+    "@netlify/blobs": "10.7.9"
+  }
+}
