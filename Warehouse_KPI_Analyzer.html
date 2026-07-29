@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DockPulse — Warehouse KPI Analyzer</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --blue-dark: #1f4e78;
+    --blue: #2e75b6;
+    --blue-light: #eaf1f8;
+    --green: #1e8e5a;
+    --red: #c0392b;
+    --gray: #595959;
+    --border: #d9e2ec;
+    --bg: #f7f9fb;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Arial, Helvetica, sans-serif; background: var(--bg); color:#1a1a1a; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 24px 60px; }
+  .header { background: linear-gradient(135deg, var(--blue-dark), var(--blue)); color:#fff; padding:20px 24px; border-radius:10px; margin-bottom:20px; }
+  .header h1 { margin:0 0 4px; font-size:22px; }
+  .header p { margin:0; font-size:13px; opacity:0.9; }
+  .section-title { font-size:14px; font-weight:bold; color:var(--blue-dark); text-transform:uppercase; letter-spacing:.03em; margin:28px 0 10px; }
+
+  .dropzone {
+    border: 2px dashed var(--blue);
+    border-radius: 10px;
+    background: #fff;
+    padding: 28px;
+    text-align: center;
+    color: var(--gray);
+    cursor: pointer;
+  }
+  .dropzone.drag { background: var(--blue-light); }
+  .dropzone strong { color: var(--blue-dark); }
+  .dropzone input { display: none; }
+
+  .file-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-top:12px; }
+  .file-card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .file-card-head .name { font-weight:bold; color:var(--blue-dark); font-size:13px; }
+  .file-card-head .meta { font-size:11px; color:#8a8a8a; }
+  .remove-file { color:var(--red); border:none; background:none; cursor:pointer; font-weight:bold; font-size:14px; }
+
+  .map-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:10px; }
+  .map-field { display:flex; flex-direction:column; gap:4px; }
+  .map-field label { font-size:11px; font-weight:bold; color:var(--gray); }
+  select, input[type=text] { font-family: Arial, sans-serif; font-size:12px; padding:6px; border:1px solid var(--border); border-radius:6px; background:#fff; }
+
+  .btn { background: var(--blue); color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:12px; font-weight:bold; cursor:pointer; }
+  .btn:hover { background: var(--blue-dark); }
+  .btn.secondary { background:#fff; color:var(--blue); border:1px solid var(--blue); }
+  .btn.secondary:hover { background: var(--blue-light); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .btn.big { padding: 12px 22px; font-size: 14px; }
+
+  .kpi-grid { display:grid; grid-template-columns: repeat(4,1fr); gap:12px; }
+  .kpi-card { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+  .kpi-label { font-size:11px; font-weight:bold; color:var(--gray); text-transform:uppercase; }
+  .kpi-value { font-size:24px; font-weight:bold; color:var(--blue-dark); margin-top:4px; }
+  .kpi-note { font-size:11px; color:#8a8a8a; margin-top:2px; }
+  .kpi-value.warn { color: var(--red); }
+  .kpi-value.ok { color: var(--green); }
+
+  .alerts { display:flex; flex-direction:column; gap:8px; }
+  .alert { border-radius:8px; padding:10px 14px; font-size:13px; font-weight:bold; display:flex; align-items:center; gap:8px; border:1px solid var(--border); }
+  .alert.warn { background:#fdecea; color:var(--red); border-color:#f5c6c0; }
+  .alert.ok { background:#eafaf1; color:var(--green); border-color:#bfe8d2; }
+
+  .charts { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  .chart-card { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px; }
+  .chart-card canvas { max-height:240px; }
+
+  .ai-panel { background:#fff; border:1px solid var(--border); border-radius:10px; padding:16px; margin-top:8px; }
+  .ai-panel-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .ai-panel-header h2 { font-size:14px; margin:0; color:var(--blue-dark); }
+  .ai-output { font-size:13px; line-height:1.6; white-space:pre-wrap; color:#222; }
+  .ai-output .placeholder { color:#999; font-style:italic; }
+  .ai-loading { font-size:13px; color:var(--blue); font-style:italic; }
+
+  table { width:100%; border-collapse:collapse; background:#fff; border-radius:8px; overflow:hidden; }
+  thead th { background:var(--blue); color:#fff; font-size:11px; padding:8px 6px; text-align:center; }
+  tbody td { padding:4px 6px; border-bottom:1px solid var(--border); text-align:center; }
+  tbody tr:nth-child(even) { background:#fbfcfe; }
+  td input { width:100%; border:1px solid transparent; background:transparent; text-align:center; font-family:Arial,sans-serif; font-size:12px; padding:4px; border-radius:4px; }
+  td input:focus { border-color:var(--blue); background:#fff; }
+  .table-actions { display:flex; gap:8px; margin:10px 0; flex-wrap: wrap; }
+  .del-btn { color:var(--red); cursor:pointer; font-weight:bold; border:none; background:none; font-size:14px; }
+  .table-wrap { overflow-x:auto; }
+  .footnote { font-size:11px; color:#8a8a8a; margin-top:6px; }
+  .banner { background:#fff8e6; border:1px solid #f0d998; color:#7a5b00; border-radius:8px; padding:10px 14px; font-size:12px; margin-top:10px; display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <h1>DockPulse — Warehouse KPI Analyzer</h1>
+    <p>Drop in exports from your WMS &mdash; the dashboard auto-detects columns, computes inbound / outbound / staffing / orders-left-to-process / averages, and flags issues automatically.</p>
+  </div>
+
+  <div class="section-title">1. Import Your WMS Files</div>
+  <div class="dropzone" id="dropzone">
+    <div><strong>Drop CSV or Excel files here</strong>, or click to browse.</div>
+    <div style="font-size:11px;margin-top:6px;">You can add multiple files &mdash; e.g. a receiving report, a shipping report, and a labor/staffing report &mdash; and they'll be combined by date.</div>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" multiple>
+  </div>
+  <div id="banner" class="banner"></div>
+  <div id="fileCards"></div>
+  <div class="table-actions" id="importActions" style="display:none;">
+    <button class="btn big" id="processAllBtn">Add Mapped Files to Dashboard</button>
+  </div>
+
+  <div class="section-title">2. Key Metrics</div>
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="section-title">3. Automated Alerts (rule-based, instant)</div>
+  <div class="alerts" id="alertsGrid"></div>
+
+  <div class="section-title">4. AI Insights</div>
+  <div class="ai-panel">
+    <div class="ai-panel-header">
+      <h2>Narrative summary &amp; recommendations</h2>
+      <button class="btn" id="genInsightsBtn">Generate AI Insights</button>
+    </div>
+    <div id="aiOutput" class="ai-output"><span class="placeholder">Click "Generate AI Insights" to have Claude analyze the data below and write a summary with recommendations.</span></div>
+  </div>
+
+  <div class="section-title">5. Trends</div>
+  <div class="charts">
+    <div class="chart-card"><canvas id="ioChart"></canvas></div>
+    <div class="chart-card"><canvas id="backlogChart"></canvas></div>
+  </div>
+
+  <div class="section-title">6. Daily Data (imported + editable)</div>
+  <p class="footnote">Starting backlog (orders open before the first row below):
+    <input id="startBacklog" type="number" style="width:70px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:2px;">
+  </p>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th><th>Inbound<br>Received</th><th>Outbound<br>Shipped</th>
+        <th>Orders<br>Received</th><th>Orders<br>Processed</th>
+        <th>Backlog<br>(Orders Left)</th><th>Staff<br>Scheduled</th>
+        <th>Staff<br>Present</th><th>Orders /<br>Staff</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="dataBody"></tbody>
+  </table>
+  </div>
+  <div class="table-actions">
+    <button class="btn secondary" id="addRowBtn">+ Add Day</button>
+    <button class="btn secondary" id="clearBtn">Clear All Data</button>
+    <button class="btn secondary" id="sampleBtn">Load Sample Data</button>
+  </div>
+  <p class="footnote">Data is saved automatically in this browser (persists on reload). "This Week" = most recent 7 rows below; "This Month" = all rows in the table. Nothing you upload leaves your browser &mdash; files are parsed locally.</p>
+
+</div>
+
+<script>
+/* ============================== STORAGE ============================== */
+const STORAGE_KEY = 'warehouseKpiData_v2';
+const STORAGE_BACKLOG = 'warehouseKpiStartBacklog_v2';
+
+function sampleData() {
+  const days = [];
+  const start = new Date('2026-07-01');
+  const inbound = [460,505,480,520,470,300,290,510,540,500,530,300,310,560];
+  const outbound = [420,470,410,450,400,260,250,480,470,420,430,240,250,440];
+  const received = [500,520,510,540,480,310,300,530,560,520,540,310,320,580];
+  const processed = [430,480,420,460,410,270,260,490,480,430,440,250,260,450];
+  const staffSched = [14,14,14,14,14,8,8,14,14,14,14,8,8,14];
+  const staffPresent = [13,14,13,14,12,8,7,13,12,11,13,8,7,12];
+  for (let i=0;i<14;i++){
+    const d = new Date(start); d.setDate(start.getDate()+i);
+    days.push({ date: localISO(d), inbound: inbound[i], outbound: outbound[i],
+      received: received[i], processed: processed[i], staffSched: staffSched[i], staffPresent: staffPresent[i] });
+  }
+  return days;
+}
+function loadData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) { try { return JSON.parse(raw); } catch(e) {} }
+  return sampleData();
+}
+function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.days)); }
+function loadBacklog() { const raw = localStorage.getItem(STORAGE_BACKLOG); return raw !== null ? Number(raw) : 40; }
+function saveBacklog() { localStorage.setItem(STORAGE_BACKLOG, String(state.startBacklog)); }
+
+const state = { days: loadData(), startBacklog: loadBacklog() };
+let ioChart, backlogChart;
+let importedFiles = []; // {name, rows, headers, kind, mapping}
+
+/* ============================== HELPERS ============================== */
+function fmt(n, digits=0) {
+  if (n === null || n === undefined || isNaN(n)) return '--';
+  return Number(n).toLocaleString(undefined, {maximumFractionDigits: digits, minimumFractionDigits: digits});
+}
+function normHeader(h) { return String(h||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+function pad2(n) { return String(n).padStart(2,'0'); }
+// Format a Date object using its LOCAL calendar fields (never toISOString, which
+// converts to UTC first and silently shifts the day near timezone boundaries).
+function localISO(d) { return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+
+function toISODate(v) {
+  if (v === null || v === undefined || v === '') return null;
+
+  // Excel serial date number (when the sheet cell wasn't already a JS Date)
+  if (typeof v === 'number') {
+    if (typeof XLSX !== 'undefined' && XLSX.SSF) {
+      const d = XLSX.SSF.parse_date_code(v);
+      if (d) return `${d.y}-${pad2(d.m)}-${pad2(d.d)}`;
+    }
+  }
+
+  // SheetJS (cellDates:true) returns JS Date objects anchored to UTC midnight,
+  // so read them back with UTC getters to avoid a local-timezone off-by-one.
+  if (v instanceof Date && !isNaN(v)) {
+    return `${v.getUTCFullYear()}-${pad2(v.getUTCMonth()+1)}-${pad2(v.getUTCDate())}`;
+  }
+
+  const s = String(v).trim();
+
+  // ISO-style YYYY-MM-DD / YYYY/MM/DD — parse the digits directly, no Date object,
+  // so there's no UTC-vs-local ambiguity at all.
+  let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if (m) return `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
+
+  // US-style M/D/YYYY or M-D-YYYY
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    let [, mo, da, yr] = m;
+    if (yr.length === 2) yr = '20'+yr;
+    return `${yr}-${pad2(mo)}-${pad2(da)}`;
+  }
+
+  // Fallback: free-form text dates (e.g. "Jan 5, 2026"). The browser parses these
+  // in LOCAL time, so read them back with local getters to match.
+  const parsed = new Date(s);
+  if (!isNaN(parsed)) return localISO(parsed);
+
+  return null;
+}
+
+/* ============================== COLUMN AUTO-DETECT ============================== */
+const KEYWORDS = {
+  date: ['date','day','shipdate','orderdate','txndate','transactiondate','shiftdate','timestamp'],
+  qty: ['qty','quantity','units','count','amount','pallets','cases','volume'],
+  inbound: ['inbound','received','receiving','receipt','intake'],
+  outbound: ['outbound','shipped','shipping','shipment','dispatch'],
+  ordersReceived: ['ordersreceived','ordersin','neworders','ordercount','orderscreated'],
+  ordersProcessed: ['ordersprocessed','ordersshipped','orderscompleted','orderspicked','ordersfulfilled','ordersclosed'],
+  staffScheduled: ['staffscheduled','scheduledstaff','plannedstaff','headcountscheduled','scheduledheadcount'],
+  staffPresent: ['staffpresent','presentstaff','actualstaff','headcountpresent','clockedin','attendance','present'],
+  status: ['status','state','orderstatus'],
+};
+function bestGuess(headers, keys) {
+  const normed = headers.map(h => ({ raw: h, n: normHeader(h) }));
+  for (const key of keys) {
+    const hit = normed.find(h => h.n.includes(key));
+    if (hit) return hit.raw;
+  }
+  return '';
+}
+function guessField(headers, field) { return bestGuess(headers, KEYWORDS[field] || []); }
+
+/* ============================== FILE PARSING ============================== */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const banner = document.getElementById('banner');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function showBanner(msg, isError) {
+  banner.style.display = 'block';
+  banner.textContent = msg;
+  banner.style.color = isError ? '#a01414' : '#7a5b00';
+  banner.style.background = isError ? '#fdecea' : '#fff8e6';
+}
+
+function handleFiles(fileList) {
+  if (typeof XLSX === 'undefined') {
+    showBanner("The file-parsing library failed to load (no internet connection?). Try again once you're online.", true);
+    return;
+  }
+  Array.from(fileList).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        if (!rows.length) { showBanner(`"${file.name}" has no readable rows.`, true); return; }
+        const headers = Object.keys(rows[0]);
+        const kind = guessKind(headers);
+        const entry = {
+          id: Math.random().toString(36).slice(2),
+          name: file.name, rows, headers, kind,
+          mapping: buildDefaultMapping(headers, kind)
+        };
+        importedFiles.push(entry);
+        renderFileCards();
+      } catch (err) {
+        showBanner(`Couldn't read "${file.name}": ${err.message}`, true);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+  fileInput.value = '';
+}
+
+function guessKind(headers) {
+  const n = headers.map(normHeader);
+  const has = (arr) => arr.some(k => n.some(h => h.includes(k)));
+  const dateishCount = n.filter(h => h.includes('date') || KEYWORDS.date.some(k=>h.includes(k))).length;
+  const hasInbound = has(KEYWORDS.inbound);
+  const hasOutbound = has(KEYWORDS.outbound);
+  const hasStaff = has(KEYWORDS.staffScheduled) || has(KEYWORDS.staffPresent) || n.some(h=>h.includes('employee')||h.includes('staff')||h.includes('worker'));
+  // Only treat a bare "order" column as a real order-log signal when there are two
+  // date-like columns too (order date + ship/complete date) — otherwise a plain
+  // "Order #" ID column on a receiving/shipping log would falsely trigger this.
+  const hasOrders = has(KEYWORDS.ordersReceived) || has(KEYWORDS.ordersProcessed) || (dateishCount >= 2 && n.some(h=>h.includes('order')));
+  const metricCount = [hasInbound,hasOutbound,hasStaff,hasOrders].filter(Boolean).length;
+  if (metricCount >= 2) return 'summary';
+  if (hasStaff) return 'staffing';
+  if (hasOrders) return 'orders';
+  if (hasInbound) return 'inbound';
+  if (hasOutbound) return 'outbound';
+  return 'summary';
+}
+
+function buildDefaultMapping(headers, kind) {
+  const m = { date: guessField(headers,'date'), qty: guessField(headers,'qty') };
+  if (kind === 'summary') {
+    m.inbound = guessField(headers,'inbound');
+    m.outbound = guessField(headers,'outbound');
+    m.ordersReceived = guessField(headers,'ordersReceived');
+    m.ordersProcessed = guessField(headers,'ordersProcessed');
+    m.staffScheduled = guessField(headers,'staffScheduled');
+    m.staffPresent = guessField(headers,'staffPresent');
+  } else if (kind === 'orders') {
+    m.receivedDate = guessField(headers,'date');
+    m.processedDate = bestGuess(headers, ['shipdate','completeddate','fulfilleddate','closeddate']) ;
+    m.status = guessField(headers,'status');
+  } else if (kind === 'staffing') {
+    m.staffScheduled = guessField(headers,'staffScheduled');
+    m.staffPresent = guessField(headers,'staffPresent');
+    m.status = guessField(headers,'status');
+  }
+  return m;
+}
+
+/* ============================== FILE MAPPING UI ============================== */
+const KIND_LABELS = {
+  summary: 'Daily Summary (one row per day, already aggregated)',
+  inbound: 'Inbound / Receiving log (one row per receipt or shipment line)',
+  outbound: 'Outbound / Shipping log (one row per shipment or order line)',
+  orders: 'Orders log (one row per order)',
+  staffing: 'Staffing / Labor log (roster or daily headcount)',
+};
+
+function renderFileCards() {
+  const container = document.getElementById('fileCards');
+  container.innerHTML = '';
+  document.getElementById('importActions').style.display = importedFiles.length ? 'flex' : 'none';
+
+  importedFiles.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'file-card';
+    const opts = f.headers.map(h => `<option value="${h}" ${f.mapping.date===h?'selected':''}>${h}</option>`).join('');
+
+    let mappingHtml = '';
+    const selectFor = (field, label) => {
+      const options = ['<option value="">-- none --</option>'].concat(
+        f.headers.map(h => `<option value="${h}" ${f.mapping[field]===h?'selected':''}>${h}</option>`)
+      ).join('');
+      return `<div class="map-field"><label>${label}</label><select data-file="${f.id}" data-field="${field}">${options}</select></div>`;
+    };
+
+    if (f.kind === 'summary') {
+      mappingHtml = [
+        selectFor('date','Date column'),
+        selectFor('inbound','Inbound qty'),
+        selectFor('outbound','Outbound qty'),
+        selectFor('ordersReceived','Orders received'),
+        selectFor('ordersProcessed','Orders processed'),
+        selectFor('staffScheduled','Staff scheduled'),
+        selectFor('staffPresent','Staff present'),
+      ].join('');
+    } else if (f.kind === 'inbound' || f.kind === 'outbound') {
+      mappingHtml = [ selectFor('date','Date column'), selectFor('qty','Quantity (blank = count rows)') ].join('');
+    } else if (f.kind === 'orders') {
+      mappingHtml = [
+        selectFor('receivedDate','Order / received date'),
+        selectFor('processedDate','Shipped / completed date (optional)'),
+        selectFor('qty','Quantity (blank = count rows)'),
+      ].join('');
+    } else if (f.kind === 'staffing') {
+      mappingHtml = [
+        selectFor('date','Date column'),
+        selectFor('staffScheduled','Staff scheduled (blank = count rows)'),
+        selectFor('staffPresent','Staff present'),
+        selectFor('status','Status column (e.g. Present/Absent, optional)'),
+      ].join('');
+    }
+
+    const kindOptions = Object.keys(KIND_LABELS).map(k => `<option value="${k}" ${f.kind===k?'selected':''}>${KIND_LABELS[k]}</option>`).join('');
+
+    card.innerHTML = `
+      <div class="file-card-head">
+        <div><div class="name">${f.name}</div><div class="meta">${f.rows.length} rows &middot; ${f.headers.length} columns detected</div></div>
+        <button class="remove-file" data-id="${f.id}">&times; remove</button>
+      </div>
+      <div class="map-field" style="margin-bottom:10px;">
+        <label>This file represents:</label>
+        <select data-file="${f.id}" data-field="__kind">${kindOptions}</select>
+      </div>
+      <div class="map-grid">${mappingHtml}</div>
+    `;
+    container.appendChild(card);
+  });
+
+  container.querySelectorAll('select').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const fid = e.target.dataset.file;
+      const field = e.target.dataset.field;
+      const f = importedFiles.find(x => x.id === fid);
+      if (!f) return;
+      if (field === '__kind') {
+        f.kind = e.target.value;
+        f.mapping = buildDefaultMapping(f.headers, f.kind);
+      } else {
+        f.mapping[field] = e.target.value;
+      }
+      renderFileCards();
+    });
+  });
+  container.querySelectorAll('.remove-file').forEach(btn => {
+    btn.addEventListener('click', e => {
+      importedFiles = importedFiles.filter(x => x.id !== e.target.dataset.id);
+      renderFileCards();
+    });
+  });
+}
+
+/* ============================== AGGREGATION ============================== */
+function ensureDay(map, dateStr) {
+  if (!map.has(dateStr)) map.set(dateStr, { date: dateStr, inbound:0, outbound:0, received:0, processed:0, staffSched:0, staffPresent:0 });
+  return map.get(dateStr);
+}
+
+function processImportedFiles() {
+  if (!importedFiles.length) return;
+  const map = new Map();
+  state.days.forEach(d => map.set(d.date, Object.assign({}, d)));
+
+  let addedRows = 0, skippedRows = 0;
+  importedFiles.forEach(f => {
+    const m = f.mapping;
+    f.rows.forEach(row => {
+      if (f.kind === 'summary') {
+        const ds = toISODate(row[m.date]);
+        if (!ds) { skippedRows++; return; }
+        const day = ensureDay(map, ds);
+        if (m.inbound) day.inbound += Number(row[m.inbound])||0;
+        if (m.outbound) day.outbound += Number(row[m.outbound])||0;
+        if (m.ordersReceived) day.received += Number(row[m.ordersReceived])||0;
+        if (m.ordersProcessed) day.processed += Number(row[m.ordersProcessed])||0;
+        if (m.staffScheduled) day.staffSched += Number(row[m.staffScheduled])||0;
+        if (m.staffPresent) day.staffPresent += Number(row[m.staffPresent])||0;
+        addedRows++;
+      } else if (f.kind === 'inbound' || f.kind === 'outbound') {
+        const ds = toISODate(row[m.date]);
+        if (!ds) { skippedRows++; return; }
+        const day = ensureDay(map, ds);
+        const val = m.qty ? (Number(row[m.qty])||0) : 1;
+        if (f.kind === 'inbound') day.inbound += val; else day.outbound += val;
+        addedRows++;
+      } else if (f.kind === 'orders') {
+        const val = m.qty ? (Number(row[m.qty])||0) : 1;
+        if (m.receivedDate) {
+          const ds = toISODate(row[m.receivedDate]);
+          if (ds) { ensureDay(map, ds).received += val; addedRows++; }
+        }
+        if (m.processedDate) {
+          const ds2 = toISODate(row[m.processedDate]);
+          if (ds2) { ensureDay(map, ds2).processed += val; }
+        }
+        if (!m.receivedDate && !m.processedDate) skippedRows++;
+      } else if (f.kind === 'staffing') {
+        const ds = toISODate(row[m.date]);
+        if (!ds) { skippedRows++; return; }
+        const day = ensureDay(map, ds);
+        if (m.staffScheduled) {
+          day.staffSched += Number(row[m.staffScheduled])||0;
+        } else {
+          day.staffSched += 1; // roster: one row = one scheduled person
+        }
+        if (m.staffPresent) {
+          day.staffPresent += Number(row[m.staffPresent])||0;
+        } else if (m.status) {
+          const s = String(row[m.status]||'').toLowerCase();
+          if (/present|clocked|worked|yes|active/.test(s)) day.staffPresent += 1;
+        } else {
+          day.staffPresent += 1;
+        }
+        addedRows++;
+      }
+    });
+  });
+
+  state.days = Array.from(map.values()).sort((a,b) => a.date.localeCompare(b.date));
+  saveData();
+  importedFiles = [];
+  renderFileCards();
+  render();
+  showBanner(`Imported ${addedRows} row(s) into the dashboard${skippedRows ? `, skipped ${skippedRows} row(s) with no recognizable date` : ''}.`, false);
+}
+
+document.getElementById('processAllBtn').addEventListener('click', processImportedFiles);
+
+/* ============================== BACKLOG / RENDER (KPIs, alerts, table, charts) ============================== */
+function computeBacklogs() {
+  let running = state.startBacklog;
+  return state.days.map(d => { running = running + (Number(d.received)||0) - (Number(d.processed)||0); return running; });
+}
+
+function render() { renderTable(); renderKpis(); renderAlerts(); renderCharts(); }
+
+function renderTable() {
+  document.getElementById('startBacklog').value = state.startBacklog;
+  const backlogs = computeBacklogs();
+  const tbody = document.getElementById('dataBody');
+  tbody.innerHTML = '';
+  state.days.forEach((d, i) => {
+    const staffPresentNum = Number(d.staffPresent) || 0;
+    const processedNum = Number(d.processed) || 0;
+    const perStaff = staffPresentNum > 0 ? (processedNum / staffPresentNum) : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="date" value="${d.date||''}" data-i="${i}" data-f="date"></td>
+      <td><input type="number" value="${d.inbound ?? ''}" data-i="${i}" data-f="inbound"></td>
+      <td><input type="number" value="${d.outbound ?? ''}" data-i="${i}" data-f="outbound"></td>
+      <td><input type="number" value="${d.received ?? ''}" data-i="${i}" data-f="received"></td>
+      <td><input type="number" value="${d.processed ?? ''}" data-i="${i}" data-f="processed"></td>
+      <td style="font-weight:bold;color:var(--blue-dark)">${fmt(backlogs[i])}</td>
+      <td><input type="number" value="${d.staffSched ?? ''}" data-i="${i}" data-f="staffSched"></td>
+      <td><input type="number" value="${d.staffPresent ?? ''}" data-i="${i}" data-f="staffPresent"></td>
+      <td>${perStaff !== null ? fmt(perStaff,1) : '--'}</td>
+      <td><button class="del-btn" data-i="${i}" title="Delete row">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const i = Number(e.target.dataset.i); const f = e.target.dataset.f;
+      state.days[i][f] = f === 'date' ? e.target.value : Number(e.target.value);
+      saveData(); render();
+    });
+  });
+  tbody.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', e => { state.days.splice(Number(e.target.dataset.i),1); saveData(); render(); });
+  });
+}
+
+function kpiCard(label, value, note, cls) {
+  return `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value ${cls||''}">${value}</div>${note ? `<div class="kpi-note">${note}</div>` : ''}</div>`;
+}
+
+function renderKpis() {
+  const days = state.days; const n = days.length;
+  const backlogs = computeBacklogs();
+  const last = n > 0 ? days[n-1] : null;
+  const currentBacklog = n > 0 ? backlogs[n-1] : state.startBacklog;
+  const weekDays = days.slice(Math.max(0, n-7));
+  const priorBacklogEnd = n >= 8 ? backlogs[n-8] : (n>0? backlogs[0] : state.startBacklog);
+  const sum = (arr, f) => arr.reduce((s,d)=> s + (Number(d[f])||0), 0);
+  const avg = (arr, f) => arr.length ? sum(arr,f)/arr.length : 0;
+  const avgOrdersDay = avg(days, 'processed');
+  const avgStaffPresent = avg(days, 'staffPresent');
+  const avgStaffSched = avg(days, 'staffSched');
+  const avgPerStaff = (() => {
+    const vals = days.filter(d => Number(d.staffPresent) > 0).map(d => Number(d.processed)/Number(d.staffPresent));
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  })();
+
+  const grid = document.getElementById('kpiGrid');
+  grid.innerHTML = [
+    kpiCard('Inbound Today', last ? fmt(last.inbound) : '--', 'Most recent day on file'),
+    kpiCard('Outbound Today', last ? fmt(last.outbound) : '--', 'Most recent day on file'),
+    kpiCard('Orders Left to Process', fmt(currentBacklog), 'Current backlog', currentBacklog > (n>1?backlogs[n-2]:state.startBacklog) ? 'warn':'ok'),
+    kpiCard('Avg Staff Present', fmt(avgStaffPresent,1), `of ${fmt(avgStaffSched,1)} scheduled`),
+    kpiCard('Inbound This Week', fmt(sum(weekDays,'inbound')), `last ${weekDays.length} day(s)`),
+    kpiCard('Outbound This Week', fmt(sum(weekDays,'outbound')), `last ${weekDays.length} day(s)`),
+    kpiCard('Inbound This Month', fmt(sum(days,'inbound')), `all ${n} day(s) on file`),
+    kpiCard('Outbound This Month', fmt(sum(days,'outbound')), `all ${n} day(s) on file`),
+    kpiCard('Avg Orders / Day', fmt(avgOrdersDay,1), 'processed, all-time avg'),
+    kpiCard('Avg Orders / Week', fmt(avgOrdersDay*7,1), 'avg/day &times; 7'),
+    kpiCard('Avg Orders / Month', fmt(avgOrdersDay*30,1), 'avg/day &times; 30'),
+    kpiCard('Orders per Staff (Avg)', fmt(avgPerStaff,1), 'processed / staff present'),
+  ].join('');
+}
+
+function renderAlerts() {
+  const days = state.days; const n = days.length;
+  const backlogs = computeBacklogs();
+  const currentBacklog = n>0 ? backlogs[n-1] : state.startBacklog;
+  const priorBacklogEnd = n >= 8 ? backlogs[n-8] : (n>0 ? backlogs[0] : state.startBacklog);
+  const backlogChangePct = priorBacklogEnd ? ((currentBacklog - priorBacklogEnd) / priorBacklogEnd) : 0;
+  const sum = (arr,f) => arr.reduce((s,d)=>s+(Number(d[f])||0),0);
+  const avgPerStaff = (() => {
+    const vals = days.filter(d=>Number(d.staffPresent)>0).map(d=>Number(d.processed)/Number(d.staffPresent));
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  })();
+  const avgStaffPresent = days.length ? sum(days,'staffPresent')/days.length : 0;
+  const avgStaffSched = days.length ? sum(days,'staffSched')/days.length : 0;
+  const outboundTotal = sum(days,'outbound'); const inboundTotal = sum(days,'inbound');
+
+  const alerts = [
+    { warn: backlogChangePct > 0.10, warnText: `⚠ Backlog rose ${(backlogChangePct*100).toFixed(0)}% over the last 7 entries`, okText: '✓ Backlog stable (within 10% week-over-week)' },
+    { warn: avgPerStaff > 45, warnText: `⚠ Orders/staff averaging ${avgPerStaff.toFixed(1)} — consider adding headcount`, okText: `✓ Staffing workload normal (${avgPerStaff.toFixed(1)} orders/staff avg)` },
+    { warn: outboundTotal < inboundTotal * 0.85, warnText: '⚠ Outbound pace is lagging inbound receipts', okText: '✓ Outbound keeping pace with inbound' },
+    { warn: avgStaffSched > 0 && avgStaffPresent < avgStaffSched * 0.9, warnText: `⚠ Staff present (${avgStaffPresent.toFixed(1)}) trailing schedule (${avgStaffSched.toFixed(1)}) by >10%`, okText: '✓ Attendance on plan' }
+  ];
+  document.getElementById('alertsGrid').innerHTML = alerts.map(a => `<div class="alert ${a.warn?'warn':'ok'}">${a.warn?a.warnText:a.okText}</div>`).join('');
+}
+
+function renderCharts() {
+  const labels = state.days.map(d => d.date);
+  const backlogs = computeBacklogs();
+  const ioCtx = document.getElementById('ioChart');
+  if (ioChart) ioChart.destroy();
+  ioChart = new Chart(ioCtx, { type:'line', data:{ labels, datasets:[
+    { label:'Inbound', data: state.days.map(d=>Number(d.inbound)||0), borderColor:'#2e75b6', backgroundColor:'rgba(46,117,182,0.1)', tension:.25 },
+    { label:'Outbound', data: state.days.map(d=>Number(d.outbound)||0), borderColor:'#1e8e5a', backgroundColor:'rgba(30,142,90,0.1)', tension:.25 }
+  ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ title:{ display:true, text:'Inbound vs Outbound (Daily)'} } } });
+
+  const blCtx = document.getElementById('backlogChart');
+  if (backlogChart) backlogChart.destroy();
+  backlogChart = new Chart(blCtx, { type:'line', data:{ labels, datasets:[
+    { label:'Backlog (Orders Left to Process)', data: backlogs, borderColor:'#c0392b', backgroundColor:'rgba(192,57,43,0.1)', tension:.25, fill:true }
+  ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ title:{ display:true, text:'Backlog Trend'} } } });
+}
+
+document.getElementById('addRowBtn').addEventListener('click', () => {
+  const last = state.days[state.days.length-1];
+  const d = last ? new Date(last.date) : new Date();
+  if (last) d.setDate(d.getDate()+1);
+  state.days.push({ date: localISO(d), inbound:0, outbound:0, received:0, processed:0, staffSched:0, staffPresent:0 });
+  saveData(); render();
+});
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (confirm('Clear all entered data? This cannot be undone.')) { state.days = []; saveData(); render(); }
+});
+document.getElementById('sampleBtn').addEventListener('click', () => { state.days = sampleData(); saveData(); render(); });
+document.getElementById('startBacklog').addEventListener('change', e => { state.startBacklog = Number(e.target.value)||0; saveBacklog(); render(); });
+
+/* ============================== AI INSIGHTS ============================== */
+document.getElementById('genInsightsBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('genInsightsBtn');
+  const out = document.getElementById('aiOutput');
+
+  btn.disabled = true;
+  out.innerHTML = '<span class="ai-loading">Analyzing warehouse data&hellip;</span>';
+  const backlogs = computeBacklogs();
+  const summary = state.days.map((d,i) => ({
+    date: d.date, inbound: d.inbound, outbound: d.outbound,
+    orders_received: d.received, orders_processed: d.processed,
+    backlog_left_to_process: backlogs[i], staff_scheduled: d.staffSched, staff_present: d.staffPresent
+  }));
+
+  // Inside Cowork, use the built-in AI bridge. Otherwise (e.g. the public
+  // deployed site), call this site's own /api/ai-insights serverless
+  // function, which uses the site owner's Anthropic API key.
+  if (window.cowork && typeof window.cowork.askClaude === 'function') {
+    const prompt = `You are a warehouse operations analyst. Given this daily data (JSON array, one row per day: inbound units received, outbound units shipped, orders received, orders processed, resulting backlog of orders left to process, staff scheduled, staff present), write a concise operational briefing:
+1. A 2-3 sentence plain-English summary of current performance.
+2. Any anomalies or concerning trends (e.g. rising backlog, understaffing, orders/staff overload, outbound lagging inbound). Call out specific numbers.
+3. 2-4 prioritized, concrete recommendations.
+Keep it under 180 words, no markdown headers, plain prose with short paragraphs or a simple dash list.`;
+    try {
+      const result = await window.cowork.askClaude(prompt, [summary]);
+      out.textContent = typeof result === 'string' ? result : (result?.text || JSON.stringify(result));
+    } catch (err) {
+      out.innerHTML = '<span class="ai-loading" style="color:var(--red)">Could not generate insights right now. Try again in a moment.</span>';
+    } finally { btn.disabled = false; }
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/ai-insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ summary })
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok || !data || data.error) {
+      const msg = (data && data.error) || `Request failed (${resp.status})`;
+      out.innerHTML = `<span class="ai-loading" style="color:var(--red)">${msg}</span>`;
+    } else {
+      out.textContent = data.text || 'No response text returned.';
+    }
+  } catch (err) {
+    out.innerHTML = '<span class="ai-loading" style="color:var(--red)">Could not reach the AI insights service. If this site was just deployed, make sure the ANTHROPIC_API_KEY environment variable is set.</span>';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+render();
+</script>
+</body>
+</html>
