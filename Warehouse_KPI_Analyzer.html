@@ -183,7 +183,7 @@
     <div class="map-field"><label>Standard shift length (hours)</label><input type="number" id="asmShiftHours" step="0.5" min="0"></div>
     <div class="map-field"><label>Total operatives</label><input type="number" id="asmTotalOperatives" step="1" min="0"></div>
     <div class="map-field"><label>Overtime pay multiplier</label><input type="number" id="asmOtMult" step="0.1" min="1"></div>
-    <div class="map-field"><label>Overtime hours (per shift, when triggered)</label><input type="number" id="asmOtHours" step="0.5" min="0"></div>
+    <div class="map-field"><label>Total overtime hours (per day, when triggered)</label><input type="number" id="asmOtHours" step="0.5" min="0"></div>
   </div>
   <div class="table-actions">
     <button class="btn secondary" id="resetAssumptionsBtn">Reset to Defaults</button>
@@ -1033,13 +1033,18 @@ function renderCost() {
     const processed = Number(d.processed) || 0;
     totalProcessed += processed;
     const overtimeTriggered = totalOperatives > 0 && staff < totalOperatives;
+    // "Overtime hours (per shift, when triggered)" is the TOTAL overtime
+    // hours worked that day when overtime is triggered — not per staff
+    // member. Not every present staff member necessarily works overtime,
+    // so multiplying this by headcount overstated both overtime cost and
+    // overtime hours (e.g. 20 hours entered became 20 &times; staff count).
     const overtimeHours = overtimeTriggered ? otHoursPerShift : 0;
     const regularCost = staff * shiftHours * wage;
-    const overtimeCost = staff * overtimeHours * wage * otMult;
+    const overtimeCost = overtimeHours * wage * otMult;
     totalLabor += regularCost + overtimeCost;
     totalRegularCost += regularCost;
     totalOvertimeCost += overtimeCost;
-    totalOvertimeHours += staff * overtimeHours;
+    totalOvertimeHours += overtimeHours;
   });
 
   const calculatedCostPerUnit = totalProcessed > 0 ? totalLabor / totalProcessed : 0;
