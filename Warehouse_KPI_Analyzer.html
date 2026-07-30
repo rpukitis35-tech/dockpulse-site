@@ -1018,10 +1018,18 @@ function updateOrdersCalc(actualPerStaff, totalOperatives) {
 function renderCost() {
   const days = state.days; const n = days.length;
   const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, otHoursPerShift = assumptions.otHours, totalOperatives = assumptions.totalOperatives;
+  const avgStaffPresent = getAvgStaffPresent(days);
 
   let totalLabor = 0, totalRegularCost = 0, totalOvertimeCost = 0, totalOvertimeHours = 0, totalProcessed = 0;
   days.forEach(d => {
-    const staff = Number(d.staffPresent) || 0;
+    // Use this day's own staffPresent figure when it's actually entered;
+    // otherwise fall back to the override-aware average from Key Metrics.
+    // Without this, a Daily Data table with staffPresent left blank/zero on
+    // every row (common when someone enters an overall Avg Staff Present
+    // override instead of day-by-day figures) makes every cost calculation
+    // below multiply by zero, silently showing £0 labor cost regardless of
+    // wage or hours.
+    const staff = Number(d.staffPresent) > 0 ? Number(d.staffPresent) : avgStaffPresent;
     const processed = Number(d.processed) || 0;
     totalProcessed += processed;
     const overtimeTriggered = totalOperatives > 0 && staff < totalOperatives;
