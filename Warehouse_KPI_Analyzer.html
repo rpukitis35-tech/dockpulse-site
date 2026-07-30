@@ -204,6 +204,15 @@
   <div class="section-title">9. Staffing &amp; Overtime Planning</div>
   <div class="kpi-grid" id="staffingGrid"></div>
   <div class="alerts" id="overtimeAlert" style="margin-top:10px;"></div>
+  <div class="calc-box">
+    <div class="calc-title">Quick calculator: staff needed for today's orders</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:12px;color:var(--gray);">Total orders today:
+        <input type="number" id="calcOrdersToday" style="width:110px;" min="0">
+      </label>
+      <span id="calcOrdersResult" style="font-size:13px;font-weight:bold;color:var(--blue-dark);"></span>
+    </div>
+  </div>
 
   <div class="section-title">10. Cost Analysis</div>
   <div class="kpi-grid" id="costGrid"></div>
@@ -844,6 +853,26 @@ function renderStaffing() {
   document.getElementById('overtimeAlert').innerHTML = overtimeNeeded
     ? `<div class="alert warn">⚠ Overtime likely needed — staff present (${fmt(avgStaffPresent, 1)}) is trailing your total operatives headcount (${fmt(totalOperatives)}). Consider covering the gap with overtime.</div>`
     : `<div class="alert ok">✓ No overtime expected — staffing meets your total operatives headcount (${fmt(totalOperatives)}).</div>`;
+
+  updateOrdersCalc(actualPerStaff, totalOperatives);
+}
+
+function updateOrdersCalc(actualPerStaff, totalOperatives) {
+  const input = document.getElementById('calcOrdersToday');
+  const resultEl = document.getElementById('calcOrdersResult');
+  const target = Number(input.value) || 0;
+
+  if (target <= 0) { resultEl.textContent = ''; return; }
+  if (!actualPerStaff || actualPerStaff <= 0) {
+    resultEl.innerHTML = `<span style="color:var(--gray);">Add some daily data below first so we can estimate your orders/staff productivity.</span>`;
+    return;
+  }
+
+  const staffNeeded = Math.ceil(target / actualPerStaff);
+  const otNeeded = totalOperatives > 0 && staffNeeded > totalOperatives;
+  resultEl.innerHTML = `≈ ${staffNeeded} staff needed (based on your ${fmt(actualPerStaff, 1)} orders/staff/day average).` + (otNeeded
+    ? ` <span style="color:var(--red);">⚠ Overtime likely needed — that's ${staffNeeded - totalOperatives} more than your ${fmt(totalOperatives)} total operatives.</span>`
+    : ` <span style="color:var(--green);">✓ No overtime expected — within your ${fmt(totalOperatives)} total operatives.</span>`);
 }
 
 /* ============================== COST ANALYSIS ============================== */
@@ -906,6 +935,8 @@ function bindAssumptionInputs() {
   bind('asmOtMult', 'otMult');
   bind('asmOtHours', 'otHours');
   bind('costPerUnitInput', 'costPerUnit');
+
+  document.getElementById('calcOrdersToday').addEventListener('input', renderStaffing);
 
   document.getElementById('resetAssumptionsBtn').addEventListener('click', () => {
     if (!confirm('Reset all Cost & Capacity Assumptions to their default values?')) return;
