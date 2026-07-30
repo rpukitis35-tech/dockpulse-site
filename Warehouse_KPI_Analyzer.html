@@ -541,6 +541,14 @@ function buildDefaultMapping(headers, kind) {
     // "outbound"/"shipped" guess, which can otherwise land on a reference
     // number column like "Outbound Delivery".
     m.qty = bestGuessQty(headers, ['packed','shipped','shipping','dispatch','outbound']) || m.qty;
+    // Pair the quantity with the date it actually happened on. Many cartons
+    // are packed before they ship, so keying "Packed Q.ty" to "Shipping
+    // date" silently drops every not-yet-shipped row from every date-based
+    // total (it has no shipping date yet). Bucket by Pack. End Date instead
+    // so packed volume is counted on the day it was packed.
+    if (/packed/i.test(m.qty)) {
+      m.date = bestGuess(headers, ['packenddate','packstartdate']) || m.date;
+    }
   } else if (kind === 'orders') {
     m.receivedDate = guessField(headers,'date');
     m.processedDate = bestGuess(headers, ['shipdate','completeddate','fulfilleddate','closeddate']) ;
