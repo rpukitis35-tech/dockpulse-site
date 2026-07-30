@@ -358,12 +358,23 @@ function toISODate(v) {
   let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
   if (m) return `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
 
-  // US-style M/D/YYYY or M-D-YYYY
+  // Ambiguous D/M/YYYY or M/D/YYYY. DockPulse's exports are UK/EU warehouse
+  // systems (currency is £ throughout), so day-first (DD/MM/YYYY) is the
+  // correct default when both numbers could be either — getting this backwards
+  // silently swaps day/month for low numbers, or produces an invalid date
+  // (e.g. "month 30") for a day-of-month above 12, corrupting every date-based
+  // aggregation downstream.
   m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (m) {
-    let [, mo, da, yr] = m;
+    let [, a, b, yr] = m;
     if (yr.length === 2) yr = '20'+yr;
-    return `${yr}-${pad2(mo)}-${pad2(da)}`;
+    let day = Number(a), month = Number(b);
+    // If the first number can't be a valid month (>12), it must be the day —
+    // already our default. If the SECOND number can't be a valid day-of-month
+    // as the month (>12), the first number must actually be the month instead.
+    if (month > 12 && day <= 12) { [day, month] = [month, day]; }
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return `${yr}-${pad2(month)}-${pad2(day)}`;
   }
 
   // Fallback: free-form text dates (e.g. "Jan 5, 2026"). The browser parses these
@@ -376,16 +387,30 @@ function toISODate(v) {
 
 /* ============================== COLUMN AUTO-DETECT ============================== */
 const KEYWORDS = {
-  date: ['date','day','shipdate','orderdate','txndate','transactiondate','shiftdate','timestamp'],
+  // Specific "this really is the actual event date" synonyms come first, so a
+  // real WMS export's completion date (shipped/received) outranks a planning
+  // or request date (e.g. "ASN Date", "Requested Delivery Date") that happens
+  // to also contain the word "date". Generic fallbacks stay at the end.
+  date: ['shippingdate','shipdate','receiptstartdate','receiptenddate','receiptdate','wmscrdate',
+         'putstartdate','putenddate','pickstartdate','pickenddate','packstartdate','packenddate',
+         'date','day','orderdate','txndate','transactiondate','shiftdate','timestamp'],
   qty: ['qty','quantity','units','count','amount','pallets','cases','volume'],
   inbound: ['inbound','received','receiving','receipt','intake'],
-  outbound: ['outbound','shipped','shipping','shipment','dispatch'],
+  outbound: ['outbound','shipped','shipping','dispatch'],
   ordersReceived: ['ordersreceived','ordersin','neworders','ordercount','orderscreated'],
   ordersProcessed: ['ordersprocessed','ordersshipped','orderscompleted','orderspicked','ordersfulfilled','ordersclosed'],
   staffScheduled: ['staffscheduled','scheduledstaff','plannedstaff','headcountscheduled','scheduledheadcount'],
   staffPresent: ['staffpresent','presentstaff','actualstaff','headcountpresent','clockedin','attendance','present'],
   status: ['status','state','orderstatus'],
 };
+// Words that suggest a column actually holds a quantity (vs. an ID, reference
+// number, code, or date that merely contains the same topical keyword).
+const QTY_HINTS = ['qty','quantity','count','amount','units','pcs','pieces','cartons','volume'];
+// Words that mark a column as almost certainly NOT a quantity, even if it
+// matches a topical keyword — e.g. "Outbound Delivery" contains "outbound"
+// but is a reference number, not a shipped-quantity column.
+const NON_QTY_HINTS = ['id','number','nbr','no','ref','date','time','timestamp','invoice','order','code','status','type','designation','delivery'];
+
 function bestGuess(headers, keys) {
   const normed = headers.map(h => ({ raw: h, n: normHeader(h) }));
   for (const key of keys) {
@@ -394,7 +419,28 @@ function bestGuess(headers, keys) {
   }
   return '';
 }
-function guessField(headers, field) { return bestGuess(headers, KEYWORDS[field] || []); }
+// Like bestGuess, but for fields that must resolve to an actual quantity
+// column. Prefers a header that matches the topical keyword AND looks
+// quantity-shaped; only falls back to a bare keyword match if it doesn't
+// also look like an ID/reference/date column, and returns '' (no guess)
+// rather than risk picking something like an order or delivery number.
+function bestGuessQty(headers, keys) {
+  const normed = headers.map(h => ({ raw: h, n: normHeader(h) }));
+  for (const key of keys) {
+    const hit = normed.find(h => h.n.includes(key) && QTY_HINTS.some(q => h.n.includes(q)));
+    if (hit) return hit.raw;
+  }
+  for (const key of keys) {
+    const hit = normed.find(h => h.n.includes(key) && !NON_QTY_HINTS.some(b => h.n.includes(b)));
+    if (hit) return hit.raw;
+  }
+  return '';
+}
+const QTY_FIELDS = new Set(['qty','inbound','outbound','ordersReceived','ordersProcessed','staffScheduled','staffPresent']);
+function guessField(headers, field) {
+  const keys = KEYWORDS[field] || [];
+  return QTY_FIELDS.has(field) ? bestGuessQty(headers, keys) : bestGuess(headers, keys);
+}
 
 /* ============================== FILE PARSING ============================== */
 const dropzone = document.getElementById('dropzone');
@@ -456,10 +502,14 @@ function guessKind(headers) {
   const hasInbound = has(KEYWORDS.inbound);
   const hasOutbound = has(KEYWORDS.outbound);
   const hasStaff = has(KEYWORDS.staffScheduled) || has(KEYWORDS.staffPresent) || n.some(h=>h.includes('employee')||h.includes('staff')||h.includes('worker'));
-  // Only treat a bare "order" column as a real order-log signal when there are two
-  // date-like columns too (order date + ship/complete date) — otherwise a plain
-  // "Order #" ID column on a receiving/shipping log would falsely trigger this.
-  const hasOrders = has(KEYWORDS.ordersReceived) || has(KEYWORDS.ordersProcessed) || (dateishCount >= 2 && n.some(h=>h.includes('order')));
+  // Only treat "order" columns as a real order-log signal when they look like
+  // an order identifier/date specifically (orderid/orderno/ordernumber/orderdate)
+  // and there are two date-like columns too (order date + ship/complete date).
+  // A bare "order" substring is too common in warehouse exports — e.g. an
+  // "Order Status" or "Hybris Order" column on a plain shipping log would
+  // otherwise falsely trigger this and misclassify a single-metric export.
+  const hasOrders = has(KEYWORDS.ordersReceived) || has(KEYWORDS.ordersProcessed) ||
+    (dateishCount >= 2 && n.some(h => h.includes('orderid') || h.includes('orderno') || h.includes('ordernumber') || h.includes('orderdate')));
   const metricCount = [hasInbound,hasOutbound,hasStaff,hasOrders].filter(Boolean).length;
   if (metricCount >= 2) return 'summary';
   if (hasStaff) return 'staffing';
@@ -478,6 +528,13 @@ function buildDefaultMapping(headers, kind) {
     m.ordersProcessed = guessField(headers,'ordersProcessed');
     m.staffScheduled = guessField(headers,'staffScheduled');
     m.staffPresent = guessField(headers,'staffPresent');
+  } else if (kind === 'inbound' || kind === 'outbound') {
+    // Prefer the topical actual-quantity column (e.g. "Received Q.ty" /
+    // "Shipped Q.ty") over the generic "qty" guess above, which can otherwise
+    // land on a planned/ordered quantity column (e.g. "ASN Q.ty" / "Ordered
+    // Q.ty") that appears earlier in the sheet but doesn't reflect what
+    // actually moved.
+    m.qty = guessField(headers, kind) || m.qty;
   } else if (kind === 'orders') {
     m.receivedDate = guessField(headers,'date');
     m.processedDate = bestGuess(headers, ['shipdate','completeddate','fulfilleddate','closeddate']) ;
