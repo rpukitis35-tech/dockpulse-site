@@ -856,7 +856,12 @@ function renderKpis() {
   const priorBacklogEnd = n >= 8 ? backlogs[n-8] : (n>0? backlogs[0] : state.startBacklog);
   const sum = (arr, f) => arr.reduce((s,d)=> s + (Number(d[f])||0), 0);
   const avg = (arr, f) => arr.length ? sum(arr,f)/arr.length : 0;
-  const avgOrdersDay = avg(days, 'processed');
+  // Avg Inbound/Outbound per Day/Week/Month are each a straight average of the
+  // total Inbound or Outbound figures across all days on file (not derived
+  // from Orders Processed/Received), so they track the raw movement volume
+  // per direction independently.
+  const avgInboundDay = avg(days, 'inbound');
+  const avgOutboundDay = avg(days, 'outbound');
   const avgStaffPresent = getAvgStaffPresent(days);
   const usingStaffPresentOverride = Number(assumptions.avgStaffPresentOverride) > 0;
   const avgStaffSched = avg(days, 'staffSched');
@@ -875,9 +880,12 @@ function renderKpis() {
     kpiCard('Outbound This Week', fmt(sum(weekDays,'outbound')), `last ${weekDays.length} day(s)`),
     kpiCard('Inbound This Month', fmt(sum(days,'inbound')), `all ${n} day(s) on file`),
     kpiCard('Outbound This Month', fmt(sum(days,'outbound')), `all ${n} day(s) on file`),
-    kpiCard('Avg Orders / Day', fmt(avgOrdersDay,1), 'processed, all-time avg'),
-    kpiCard('Avg Orders / Week', fmt(avgOrdersDay*7,1), 'avg/day &times; 7'),
-    kpiCard('Avg Orders / Month', fmt(avgOrdersDay*30,1), 'avg/day &times; 30'),
+    kpiCard('Avg Inbound / Day', fmt(avgInboundDay,1), 'inbound, all-time avg'),
+    kpiCard('Avg Outbound / Day', fmt(avgOutboundDay,1), 'outbound, all-time avg'),
+    kpiCard('Avg Inbound / Week', fmt(avgInboundDay*7,1), 'avg/day &times; 7'),
+    kpiCard('Avg Outbound / Week', fmt(avgOutboundDay*7,1), 'avg/day &times; 7'),
+    kpiCard('Avg Inbound / Month', fmt(avgInboundDay*30,1), 'avg/day &times; 30'),
+    kpiCard('Avg Outbound / Month', fmt(avgOutboundDay*30,1), 'avg/day &times; 30'),
     kpiCard('Orders per Staff (Avg)', fmt(avgPerStaff,1), 'processed / staff present'),
   ].join('');
 }
