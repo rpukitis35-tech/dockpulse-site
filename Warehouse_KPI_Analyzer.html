@@ -192,6 +192,10 @@
     <div class="map-field"><label>Overtime hours (per shift, when triggered)</label><input type="number" id="asmOtHours" step="0.5" min="0"></div>
     <div class="map-field"><label>Standard orders / staff / shift</label><input type="number" id="asmCapacity" step="1" min="0"></div>
   </div>
+  <div class="table-actions">
+    <button class="btn secondary" id="resetAssumptionsBtn">Reset to Defaults</button>
+  </div>
+  <p class="footnote">If any of the numbers above look far too large or too small, click "Reset to Defaults" and re-enter them.</p>
 
   <div class="section-title">8. Forecasting</div>
   <div class="kpi-grid" id="forecastGrid"></div>
@@ -251,6 +255,20 @@
 </div>
 
 <script>
+/* ============================== NUMBER INPUT SAFETY ============================== */
+// Browsers silently change a focused <input type="number">'s value when the
+// mouse wheel scrolls over it — a well-known footgun that lets normal page
+// scrolling accidentally inflate assumption values (wage, capacity, overtime
+// hours, etc.) without the user ever meaning to type anything. Blur any
+// number input the instant a wheel/scroll happens so scrolling the page
+// never changes a number field's value.
+document.addEventListener('wheel', () => {
+  const el = document.activeElement;
+  if (el && el.tagName === 'INPUT' && el.type === 'number') {
+    el.blur();
+  }
+}, { passive: true });
+
 /* ============================== STORAGE ============================== */
 const STORAGE_KEY = 'warehouseKpiData_v2';
 const STORAGE_BACKLOG = 'warehouseKpiStartBacklog_v2';
@@ -910,6 +928,14 @@ function bindAssumptionInputs() {
   bind('costPerUnitInput', 'costPerUnit');
 
   document.getElementById('calcOrders').addEventListener('input', updateCalc);
+
+  document.getElementById('resetAssumptionsBtn').addEventListener('click', () => {
+    if (!confirm('Reset all Cost & Capacity Assumptions to their default values?')) return;
+    assumptions = defaultAssumptions();
+    saveAssumptions();
+    bindAssumptionInputs();
+    render();
+  });
 }
 bindAssumptionInputs();
 
