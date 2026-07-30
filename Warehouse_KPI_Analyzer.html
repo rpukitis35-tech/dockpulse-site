@@ -212,6 +212,15 @@
 
   <div class="section-title">10. Cost Analysis</div>
   <div class="kpi-grid" id="costGrid"></div>
+  <div class="calc-box" style="margin-top:12px;">
+    <div class="calc-title">Set your own cost per unit (optional)</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:12px;color:var(--gray);">Cost per unit (&pound;):
+        <input type="number" id="costPerUnitInput" style="width:110px;" step="0.01" min="0" placeholder="auto">
+      </label>
+      <span class="footnote" style="margin:0;">Leave blank to use the calculated value (total labor cost &divide; units processed).</span>
+    </div>
+  </div>
   <div class="charts" style="margin-top:12px;">
     <div class="chart-card"><canvas id="costCompareChart"></canvas></div>
   </div>
@@ -277,7 +286,7 @@ let importedFiles = []; // {name, rows, headers, kind, mapping}
 
 /* ============================== ASSUMPTIONS (cost & capacity) ============================== */
 const ASSUMPTIONS_KEY = 'warehouseKpiAssumptions_v1';
-function defaultAssumptions() { return { wage: 15, shiftHours: 8, otMult: 1.5, otHours: 2, capacity: 40 }; }
+function defaultAssumptions() { return { wage: 15, shiftHours: 8, otMult: 1.5, otHours: 2, capacity: 40, costPerUnit: 0 }; }
 function loadAssumptions() {
   const raw = localStorage.getItem(ASSUMPTIONS_KEY);
   if (raw) { try { return Object.assign(defaultAssumptions(), JSON.parse(raw)); } catch (e) {} }
@@ -859,13 +868,16 @@ function renderCost() {
     totalOvertimeHours += staff * overtimeHours;
   });
 
-  const costPerUnit = totalProcessed > 0 ? totalLabor / totalProcessed : 0;
+  const calculatedCostPerUnit = totalProcessed > 0 ? totalLabor / totalProcessed : 0;
+  const overrideCostPerUnit = Number(assumptions.costPerUnit) || 0;
+  const usingOverride = overrideCostPerUnit > 0;
+  const costPerUnit = usingOverride ? overrideCostPerUnit : calculatedCostPerUnit;
 
   document.getElementById('costGrid').innerHTML = [
     kpiCard('Total Labor Cost (period)', '£' + fmt(totalLabor)),
     kpiCard('Est. Overtime Cost (period)', '£' + fmt(totalOvertimeCost), 'portion of labor cost above'),
     kpiCard('Actual Overtime Hours Worked', fmt(totalOvertimeHours, 1) + ' hrs', 'total across all staff, this period'),
-    kpiCard('Cost per Unit', '£' + fmt(costPerUnit, 2), 'total labor cost ÷ units processed'),
+    kpiCard('Cost per Unit', '£' + fmt(costPerUnit, 2), usingOverride ? 'your entered value' : 'total labor cost ÷ units processed (auto)'),
   ].join('');
 
   const ctx = document.getElementById('costCompareChart');
@@ -883,6 +895,7 @@ function bindAssumptionInputs() {
   document.getElementById('asmOtMult').value = assumptions.otMult;
   document.getElementById('asmOtHours').value = assumptions.otHours;
   document.getElementById('asmCapacity').value = assumptions.capacity;
+  document.getElementById('costPerUnitInput').value = assumptions.costPerUnit ? assumptions.costPerUnit : '';
 
   const bind = (id, key) => document.getElementById(id).addEventListener('input', e => {
     assumptions[key] = Number(e.target.value) || 0;
@@ -894,6 +907,7 @@ function bindAssumptionInputs() {
   bind('asmOtMult', 'otMult');
   bind('asmOtHours', 'otHours');
   bind('asmCapacity', 'capacity');
+  bind('costPerUnitInput', 'costPerUnit');
 
   document.getElementById('calcOrders').addEventListener('input', updateCalc);
 }
