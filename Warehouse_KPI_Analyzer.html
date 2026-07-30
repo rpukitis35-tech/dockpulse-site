@@ -528,13 +528,19 @@ function buildDefaultMapping(headers, kind) {
     m.ordersProcessed = guessField(headers,'ordersProcessed');
     m.staffScheduled = guessField(headers,'staffScheduled');
     m.staffPresent = guessField(headers,'staffPresent');
-  } else if (kind === 'inbound' || kind === 'outbound') {
-    // Prefer the topical actual-quantity column (e.g. "Received Q.ty" /
-    // "Shipped Q.ty") over the generic "qty" guess above, which can otherwise
-    // land on a planned/ordered quantity column (e.g. "ASN Q.ty" / "Ordered
-    // Q.ty") that appears earlier in the sheet but doesn't reflect what
-    // actually moved.
+  } else if (kind === 'inbound') {
+    // Prefer the topical actual-quantity column (e.g. "Received Q.ty") over
+    // the generic "qty" guess above, which can otherwise land on a
+    // planned/ordered quantity column (e.g. "ASN Q.ty") that appears earlier
+    // in the sheet but doesn't reflect what actually moved.
     m.qty = guessField(headers, kind) || m.qty;
+  } else if (kind === 'outbound') {
+    // For outbound, "Packed Q.ty" is the true fulfilled volume for this
+    // warehouse's process — prefer it over "Shipped Q.ty" (which can lag or
+    // under-report vs. what was actually packed) and over the generic
+    // "outbound"/"shipped" guess, which can otherwise land on a reference
+    // number column like "Outbound Delivery".
+    m.qty = bestGuessQty(headers, ['packed','shipped','shipping','dispatch','outbound']) || m.qty;
   } else if (kind === 'orders') {
     m.receivedDate = guessField(headers,'date');
     m.processedDate = bestGuess(headers, ['shipdate','completeddate','fulfilleddate','closeddate']) ;
