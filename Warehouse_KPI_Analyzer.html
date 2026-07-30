@@ -188,9 +188,9 @@
   <div class="map-grid" style="margin-bottom:10px;">
     <div class="map-field"><label>Hourly wage per staff (&pound;)</label><input type="number" id="asmWage" step="0.5" min="0"></div>
     <div class="map-field"><label>Standard shift length (hours)</label><input type="number" id="asmShiftHours" step="0.5" min="0"></div>
+    <div class="map-field"><label>Total operatives</label><input type="number" id="asmTotalOperatives" step="1" min="0"></div>
     <div class="map-field"><label>Overtime pay multiplier</label><input type="number" id="asmOtMult" step="0.1" min="1"></div>
     <div class="map-field"><label>Overtime hours (per shift, when triggered)</label><input type="number" id="asmOtHours" step="0.5" min="0"></div>
-    <div class="map-field"><label>Standard orders / staff / shift</label><input type="number" id="asmCapacity" step="1" min="0"></div>
   </div>
   <div class="table-actions">
     <button class="btn secondary" id="resetAssumptionsBtn">Reset to Defaults</button>
@@ -204,15 +204,6 @@
   <div class="section-title">9. Staffing &amp; Overtime Planning</div>
   <div class="kpi-grid" id="staffingGrid"></div>
   <div class="alerts" id="overtimeAlert" style="margin-top:10px;"></div>
-  <div class="calc-box">
-    <div class="calc-title">Quick calculator: staff needed for a target order volume</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <label style="font-size:12px;color:var(--gray);">Orders per day:
-        <input type="number" id="calcOrders" style="width:110px;" value="500" min="0">
-      </label>
-      <span id="calcResult" style="font-size:13px;font-weight:bold;color:var(--blue-dark);"></span>
-    </div>
-  </div>
 
   <div class="section-title">10. Cost Analysis</div>
   <div class="kpi-grid" id="costGrid"></div>
@@ -304,7 +295,7 @@ let importedFiles = []; // {name, rows, headers, kind, mapping}
 
 /* ============================== ASSUMPTIONS (cost & capacity) ============================== */
 const ASSUMPTIONS_KEY = 'warehouseKpiAssumptions_v1';
-function defaultAssumptions() { return { wage: 15, shiftHours: 8, otMult: 1.5, otHours: 2, capacity: 40, costPerUnit: 0 }; }
+function defaultAssumptions() { return { wage: 15, shiftHours: 8, totalOperatives: 15, otMult: 1.5, otHours: 2, costPerUnit: 0 }; }
 function loadAssumptions() {
   const raw = localStorage.getItem(ASSUMPTIONS_KEY);
   if (raw) { try { return Object.assign(defaultAssumptions(), JSON.parse(raw)); } catch (e) {} }
@@ -833,50 +824,39 @@ function renderForecast() {
 }
 
 /* ============================== STAFFING & OVERTIME ============================== */
-function updateCalc() {
-  const target = Number(document.getElementById('calcOrders').value) || 0;
-  const cap = assumptions.capacity > 0 ? assumptions.capacity : 1;
-  const needed = Math.ceil(target / cap);
-  document.getElementById('calcResult').textContent = `≈ ${needed} staff needed at ${fmt(assumptions.capacity)} orders/staff/shift.`;
-}
-
 function renderStaffing() {
   const days = state.days; const n = days.length;
   const sum = (arr, f) => arr.reduce((s, d) => s + (Number(d[f]) || 0), 0);
   const avgOrdersDay = n ? sum(days, 'processed') / n : 0;
   const avgStaffPresent = n ? sum(days, 'staffPresent') / n : 0;
-  const capacity = assumptions.capacity;
+  const totalOperatives = assumptions.totalOperatives;
   const actualPerStaff = avgStaffPresent > 0 ? avgOrdersDay / avgStaffPresent : 0;
-  const recommendedStaff = capacity > 0 ? Math.ceil(avgOrdersDay / capacity) : 0;
-  const gap = recommendedStaff - Math.round(avgStaffPresent);
+  const gap = totalOperatives - avgStaffPresent;
 
   document.getElementById('staffingGrid').innerHTML = [
-    kpiCard('Avg Orders / Staff / Day (actual)', fmt(actualPerStaff, 1), `capacity benchmark: ${fmt(capacity)}`, actualPerStaff > capacity ? 'warn' : 'ok'),
-    kpiCard('Avg Staff Present', fmt(avgStaffPresent, 1), 'current average'),
-    kpiCard('Recommended Staff', fmt(recommendedStaff), `at ${fmt(capacity)} orders/staff/shift`),
-    kpiCard('Staffing Gap', (gap > 0 ? '+' : '') + fmt(gap), gap > 0 ? 'understaffed vs. recommended' : 'staffing covers demand', gap > 0 ? 'warn' : 'ok'),
+    kpiCard('Avg Orders / Staff / Day (actual)', fmt(actualPerStaff, 1), 'processed &divide; staff present'),
+    kpiCard('Avg Staff Present', fmt(avgStaffPresent, 1), `of ${fmt(totalOperatives)} total operatives`),
+    kpiCard('Total Operatives', fmt(totalOperatives), 'your entered headcount'),
+    kpiCard('Staffing Gap', (gap > 0 ? '+' : '') + fmt(gap, 1), gap > 0 ? 'understaffed vs. total operatives' : 'staffing meets headcount', gap > 0 ? 'warn' : 'ok'),
   ].join('');
 
-  const overtimeNeeded = capacity > 0 && actualPerStaff > capacity;
+  const overtimeNeeded = totalOperatives > 0 && avgStaffPresent < totalOperatives;
   document.getElementById('overtimeAlert').innerHTML = overtimeNeeded
-    ? `<div class="alert warn">⚠ Overtime likely needed — staff are averaging ${fmt(actualPerStaff, 1)} orders/day vs. your ${fmt(capacity)} standard capacity. ${gap > 0 ? `Consider adding ~${gap} staff` : 'Consider authorizing overtime'} to close the gap.</div>`
-    : `<div class="alert ok">✓ No overtime expected — current staffing covers the workload within standard capacity (${fmt(capacity)} orders/staff/shift).</div>`;
-
-  updateCalc();
+    ? `<div class="alert warn">⚠ Overtime likely needed — staff present (${fmt(avgStaffPresent, 1)}) is trailing your total operatives headcount (${fmt(totalOperatives)}). Consider covering the gap with overtime.</div>`
+    : `<div class="alert ok">✓ No overtime expected — staffing meets your total operatives headcount (${fmt(totalOperatives)}).</div>`;
 }
 
 /* ============================== COST ANALYSIS ============================== */
 function renderCost() {
   const days = state.days; const n = days.length;
-  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, otHoursPerShift = assumptions.otHours, capacity = assumptions.capacity;
+  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, otHoursPerShift = assumptions.otHours, totalOperatives = assumptions.totalOperatives;
 
   let totalLabor = 0, totalRegularCost = 0, totalOvertimeCost = 0, totalOvertimeHours = 0, totalProcessed = 0;
   days.forEach(d => {
     const staff = Number(d.staffPresent) || 0;
     const processed = Number(d.processed) || 0;
     totalProcessed += processed;
-    const perStaff = staff > 0 ? processed / staff : 0;
-    const overtimeTriggered = capacity > 0 && perStaff > capacity;
+    const overtimeTriggered = totalOperatives > 0 && staff < totalOperatives;
     const overtimeHours = overtimeTriggered ? otHoursPerShift : 0;
     const regularCost = staff * shiftHours * wage;
     const overtimeCost = staff * overtimeHours * wage * otMult;
@@ -910,9 +890,9 @@ function renderCost() {
 function bindAssumptionInputs() {
   document.getElementById('asmWage').value = assumptions.wage;
   document.getElementById('asmShiftHours').value = assumptions.shiftHours;
+  document.getElementById('asmTotalOperatives').value = assumptions.totalOperatives;
   document.getElementById('asmOtMult').value = assumptions.otMult;
   document.getElementById('asmOtHours').value = assumptions.otHours;
-  document.getElementById('asmCapacity').value = assumptions.capacity;
   document.getElementById('costPerUnitInput').value = assumptions.costPerUnit ? assumptions.costPerUnit : '';
 
   const bind = (id, key) => document.getElementById(id).addEventListener('input', e => {
@@ -922,12 +902,10 @@ function bindAssumptionInputs() {
   });
   bind('asmWage', 'wage');
   bind('asmShiftHours', 'shiftHours');
+  bind('asmTotalOperatives', 'totalOperatives');
   bind('asmOtMult', 'otMult');
   bind('asmOtHours', 'otHours');
-  bind('asmCapacity', 'capacity');
   bind('costPerUnitInput', 'costPerUnit');
-
-  document.getElementById('calcOrders').addEventListener('input', updateCalc);
 
   document.getElementById('resetAssumptionsBtn').addEventListener('click', () => {
     if (!confirm('Reset all Cost & Capacity Assumptions to their default values?')) return;
