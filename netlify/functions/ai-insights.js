@@ -64,8 +64,22 @@ ${JSON.stringify(summary)}`;
     });
 
     if (!resp.ok) {
-      const detail = await resp.text();
-      return jsonResponse(502, { error: `Anthropic API returned ${resp.status}`, detail });
+      const detailText = await resp.text();
+      // Anthropic's error body is JSON like:
+      // {"type":"error","error":{"type":"invalid_request_error","message":"..."}}
+      // Surface that human-readable message instead of a bare status code,
+      // so billing/credit/rate-limit issues are actionable in the UI rather
+      // than showing an opaque "Anthropic API returned 400".
+      let friendlyError = `Anthropic API returned ${resp.status}`;
+      try {
+        const parsedDetail = JSON.parse(detailText);
+        if (parsedDetail && parsedDetail.error && parsedDetail.error.message) {
+          friendlyError = parsedDetail.error.message;
+        }
+      } catch (parseErr) {
+        // detailText wasn't JSON — fall back to the generic message above.
+      }
+      return jsonResponse(502, { error: friendlyError, detail: detailText });
     }
 
     const data = await resp.json();
