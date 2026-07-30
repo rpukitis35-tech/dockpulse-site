@@ -189,6 +189,7 @@
     <div class="map-field"><label>Hourly wage per staff (&pound;)</label><input type="number" id="asmWage" step="0.5" min="0"></div>
     <div class="map-field"><label>Standard shift length (hours)</label><input type="number" id="asmShiftHours" step="0.5" min="0"></div>
     <div class="map-field"><label>Overtime pay multiplier</label><input type="number" id="asmOtMult" step="0.1" min="1"></div>
+    <div class="map-field"><label>Overtime hours (per shift, when triggered)</label><input type="number" id="asmOtHours" step="0.5" min="0"></div>
     <div class="map-field"><label>Standard orders / staff / shift</label><input type="number" id="asmCapacity" step="1" min="0"></div>
   </div>
 
@@ -276,7 +277,7 @@ let importedFiles = []; // {name, rows, headers, kind, mapping}
 
 /* ============================== ASSUMPTIONS (cost & capacity) ============================== */
 const ASSUMPTIONS_KEY = 'warehouseKpiAssumptions_v1';
-function defaultAssumptions() { return { wage: 15, shiftHours: 8, otMult: 1.5, capacity: 40 }; }
+function defaultAssumptions() { return { wage: 15, shiftHours: 8, otMult: 1.5, otHours: 2, capacity: 40 }; }
 function loadAssumptions() {
   const raw = localStorage.getItem(ASSUMPTIONS_KEY);
   if (raw) { try { return Object.assign(defaultAssumptions(), JSON.parse(raw)); } catch (e) {} }
@@ -840,7 +841,7 @@ function renderStaffing() {
 /* ============================== COST ANALYSIS ============================== */
 function renderCost() {
   const days = state.days; const n = days.length;
-  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, capacity = assumptions.capacity;
+  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, otHoursPerShift = assumptions.otHours, capacity = assumptions.capacity;
 
   let totalLabor = 0, totalRegularCost = 0, totalOvertimeCost = 0, totalOvertimeHours = 0, totalProcessed = 0;
   days.forEach(d => {
@@ -848,11 +849,8 @@ function renderCost() {
     const processed = Number(d.processed) || 0;
     totalProcessed += processed;
     const perStaff = staff > 0 ? processed / staff : 0;
-    let overtimeHours = 0;
-    if (capacity > 0 && perStaff > capacity) {
-      const excessRatio = (perStaff - capacity) / capacity;
-      overtimeHours = shiftHours * excessRatio;
-    }
+    const overtimeTriggered = capacity > 0 && perStaff > capacity;
+    const overtimeHours = overtimeTriggered ? otHoursPerShift : 0;
     const regularCost = staff * shiftHours * wage;
     const overtimeCost = staff * overtimeHours * wage * otMult;
     totalLabor += regularCost + overtimeCost;
@@ -883,6 +881,7 @@ function bindAssumptionInputs() {
   document.getElementById('asmWage').value = assumptions.wage;
   document.getElementById('asmShiftHours').value = assumptions.shiftHours;
   document.getElementById('asmOtMult').value = assumptions.otMult;
+  document.getElementById('asmOtHours').value = assumptions.otHours;
   document.getElementById('asmCapacity').value = assumptions.capacity;
 
   const bind = (id, key) => document.getElementById(id).addEventListener('input', e => {
@@ -893,6 +892,7 @@ function bindAssumptionInputs() {
   bind('asmWage', 'wage');
   bind('asmShiftHours', 'shiftHours');
   bind('asmOtMult', 'otMult');
+  bind('asmOtHours', 'otHours');
   bind('asmCapacity', 'capacity');
 
   document.getElementById('calcOrders').addEventListener('input', updateCalc);
