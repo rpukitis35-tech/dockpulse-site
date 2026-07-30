@@ -549,6 +549,12 @@ function buildDefaultMapping(headers, kind) {
     if (/packed/i.test(m.qty)) {
       m.date = bestGuess(headers, ['packenddate','packstartdate']) || m.date;
     }
+    // An outbound/order-line export also carries order-fulfillment detail:
+    // "Ordered Q.ty" is how many units the customer ordered (Orders Received)
+    // and the Packed/Shipped qty above is how many were fulfilled (Orders
+    // Processed) — auto-populate both so the Daily Data table's Orders
+    // Received/Processed/Backlog columns fill in without manual entry.
+    m.orderedQty = bestGuessQty(headers, ['ordered']) || '';
   } else if (kind === 'orders') {
     m.receivedDate = guessField(headers,'date');
     m.processedDate = bestGuess(headers, ['shipdate','completeddate','fulfilleddate','closeddate']) ;
@@ -598,8 +604,14 @@ function renderFileCards() {
         selectFor('staffScheduled','Staff scheduled'),
         selectFor('staffPresent','Staff present'),
       ].join('');
-    } else if (f.kind === 'inbound' || f.kind === 'outbound') {
+    } else if (f.kind === 'inbound') {
       mappingHtml = [ selectFor('date','Date column'), selectFor('qty','Quantity (blank = count rows)') ].join('');
+    } else if (f.kind === 'outbound') {
+      mappingHtml = [
+        selectFor('date','Date column'),
+        selectFor('qty','Packed/Shipped qty (also used for Orders Processed)'),
+        selectFor('orderedQty','Ordered qty (used for Orders Received, optional)'),
+      ].join('');
     } else if (f.kind === 'orders') {
       mappingHtml = [
         selectFor('receivedDate','Order / received date'),
@@ -685,7 +697,16 @@ function processImportedFiles() {
         if (!ds) { skippedRows++; return; }
         const day = ensureDay(map, ds);
         const val = m.qty ? (Number(row[m.qty])||0) : 1;
-        if (f.kind === 'inbound') day.inbound += val; else day.outbound += val;
+        if (f.kind === 'inbound') {
+          day.inbound += val;
+        } else {
+          day.outbound += val;
+          // Ordered Q.ty = Orders Received; Packed/Shipped qty above doubles
+          // as Orders Processed — fills the Daily Data table's order-pipeline
+          // columns automatically from the same outbound export.
+          if (m.orderedQty) day.received += Number(row[m.orderedQty])||0;
+          day.processed += val;
+        }
         addedRows++;
       } else if (f.kind === 'orders') {
         const val = m.qty ? (Number(row[m.qty])||0) : 1;
