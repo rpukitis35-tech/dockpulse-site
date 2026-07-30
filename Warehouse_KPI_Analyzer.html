@@ -75,13 +75,6 @@
   .chart-card { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px; }
   .chart-card canvas { max-height:240px; }
 
-  .ai-panel { background:#fff; border:1px solid var(--border); border-radius:10px; padding:16px; margin-top:8px; }
-  .ai-panel-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-  .ai-panel-header h2 { font-size:14px; margin:0; color:var(--blue-dark); }
-  .ai-output { font-size:13px; line-height:1.6; white-space:pre-wrap; color:#222; }
-  .ai-output .placeholder { color:#999; font-style:italic; }
-  .ai-loading { font-size:13px; color:var(--blue); font-style:italic; }
-
   table { width:100%; border-collapse:collapse; background:#fff; border-radius:8px; overflow:hidden; }
   thead th { background:var(--blue); color:#fff; font-size:11px; padding:8px 6px; text-align:center; }
   tbody td { padding:4px 6px; border-bottom:1px solid var(--border); text-align:center; }
@@ -153,22 +146,13 @@
   <div class="section-title">3. Automated Alerts (rule-based, instant)</div>
   <div class="alerts" id="alertsGrid"></div>
 
-  <div class="section-title">4. AI Insights</div>
-  <div class="ai-panel">
-    <div class="ai-panel-header">
-      <h2>Narrative summary &amp; recommendations</h2>
-      <button class="btn" id="genInsightsBtn">Generate AI Insights</button>
-    </div>
-    <div id="aiOutput" class="ai-output"><span class="placeholder">Click "Generate AI Insights" to have Claude analyze the data below and write a summary with recommendations.</span></div>
-  </div>
-
-  <div class="section-title">5. Trends</div>
+  <div class="section-title">4. Trends</div>
   <div class="charts">
     <div class="chart-card"><canvas id="ioChart"></canvas></div>
     <div class="chart-card"><canvas id="backlogChart"></canvas></div>
   </div>
 
-  <div class="section-title">6. Daily Data (imported + editable)</div>
+  <div class="section-title">5. Daily Data (imported + editable)</div>
   <p class="footnote">Starting backlog (orders open before the first row below):
     <input id="startBacklog" type="number" style="width:70px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:2px;">
   </p>
@@ -192,7 +176,7 @@
   </div>
   <p class="footnote">Data is saved automatically in this browser (persists on reload). "This Week" = most recent 7 rows below; "This Month" = all rows in the table. Nothing you upload leaves your browser &mdash; files are parsed locally.</p>
 
-  <div class="section-title">7. Cost &amp; Capacity Assumptions</div>
+  <div class="section-title">6. Cost &amp; Capacity Assumptions</div>
   <p class="footnote">Set these once &mdash; they power the forecasting, staffing, and cost sections below, and are saved automatically in this browser.</p>
   <div class="map-grid" style="margin-bottom:10px;">
     <div class="map-field"><label>Hourly wage per staff (&pound;)</label><input type="number" id="asmWage" step="0.5" min="0"></div>
@@ -206,11 +190,11 @@
   </div>
   <p class="footnote">If any of the numbers above look far too large or too small, click "Reset to Defaults" and re-enter them.</p>
 
-  <div class="section-title">8. Forecasting</div>
+  <div class="section-title">7. Forecasting</div>
   <div class="kpi-grid" id="forecastGrid"></div>
   <p class="footnote" id="forecastNote"></p>
 
-  <div class="section-title">9. Staffing &amp; Overtime Planning</div>
+  <div class="section-title">8. Staffing &amp; Overtime Planning</div>
   <div class="kpi-grid" id="staffingGrid"></div>
   <div class="alerts" id="overtimeAlert" style="margin-top:10px;"></div>
   <div class="calc-box">
@@ -223,7 +207,7 @@
     </div>
   </div>
 
-  <div class="section-title">10. Cost Analysis</div>
+  <div class="section-title">9. Cost Analysis</div>
   <div class="kpi-grid" id="costGrid"></div>
   <div class="calc-box" style="margin-top:12px;">
     <div class="calc-title">Set your own cost per unit (optional)</div>
@@ -238,7 +222,7 @@
     <div class="chart-card"><canvas id="costCompareChart"></canvas></div>
   </div>
 
-  <div class="section-title">11. Shift Handover Notes</div>
+  <div class="section-title">10. Shift Handover Notes</div>
   <p class="footnote">Log what the next shift needs to know &mdash; backlog status, equipment issues, staffing changes, anything unfinished.</p>
   <div class="handover-form">
     <div class="map-field">
@@ -1164,58 +1148,6 @@ document.getElementById('clearBtn').addEventListener('click', () => {
 });
 document.getElementById('sampleBtn').addEventListener('click', () => { state.days = sampleData(); saveData(); render(); });
 document.getElementById('startBacklog').addEventListener('change', e => { state.startBacklog = Number(e.target.value)||0; saveBacklog(); render(); });
-
-/* ============================== AI INSIGHTS ============================== */
-document.getElementById('genInsightsBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('genInsightsBtn');
-  const out = document.getElementById('aiOutput');
-
-  btn.disabled = true;
-  out.innerHTML = '<span class="ai-loading">Analyzing warehouse data&hellip;</span>';
-  const backlogs = computeBacklogs();
-  const summary = state.days.map((d,i) => ({
-    date: d.date, inbound: d.inbound, outbound: d.outbound,
-    orders_received: d.received, orders_processed: d.processed,
-    backlog_left_to_process: backlogs[i], staff_scheduled: d.staffSched, staff_present: d.staffPresent
-  }));
-
-  // Inside Cowork, use the built-in AI bridge. Otherwise (e.g. the public
-  // deployed site), call this site's own /api/ai-insights serverless
-  // function, which uses the site owner's Anthropic API key.
-  if (window.cowork && typeof window.cowork.askClaude === 'function') {
-    const prompt = `You are a warehouse operations analyst. Given this daily data (JSON array, one row per day: inbound units received, outbound units shipped, orders received, orders processed, resulting backlog of orders left to process, staff scheduled, staff present), write a concise operational briefing:
-1. A 2-3 sentence plain-English summary of current performance.
-2. Any anomalies or concerning trends (e.g. rising backlog, understaffing, orders/staff overload, outbound lagging inbound). Call out specific numbers.
-3. 2-4 prioritized, concrete recommendations.
-Keep it under 180 words, no markdown headers, plain prose with short paragraphs or a simple dash list.`;
-    try {
-      const result = await window.cowork.askClaude(prompt, [summary]);
-      out.textContent = typeof result === 'string' ? result : (result?.text || JSON.stringify(result));
-    } catch (err) {
-      out.innerHTML = '<span class="ai-loading" style="color:var(--red)">Could not generate insights right now. Try again in a moment.</span>';
-    } finally { btn.disabled = false; }
-    return;
-  }
-
-  try {
-    const resp = await fetch('/api/ai-insights', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary })
-    });
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok || !data || data.error) {
-      const msg = (data && data.error) || `Request failed (${resp.status})`;
-      out.innerHTML = `<span class="ai-loading" style="color:var(--red)">${msg}</span>`;
-    } else {
-      out.textContent = data.text || 'No response text returned.';
-    }
-  } catch (err) {
-    out.innerHTML = '<span class="ai-loading" style="color:var(--red)">Could not reach the AI insights service. If this site was just deployed, make sure the ANTHROPIC_API_KEY environment variable is set.</span>';
-  } finally {
-    btn.disabled = false;
-  }
-});
 
 /* ============================== ACCOUNT (Netlify Identity + saved data) ============================== */
 function updateAccountUI(user) {
