@@ -183,7 +183,6 @@
     <div class="map-field"><label>Standard shift length (hours)</label><input type="number" id="asmShiftHours" step="0.5" min="0"></div>
     <div class="map-field"><label>Total operatives</label><input type="number" id="asmTotalOperatives" step="1" min="0"></div>
     <div class="map-field"><label>Overtime pay multiplier</label><input type="number" id="asmOtMult" step="0.1" min="1"></div>
-    <div class="map-field"><label>Total overtime hours (per day, when triggered)</label><input type="number" id="asmOtHours" step="0.5" min="0"></div>
   </div>
   <div class="table-actions">
     <button class="btn secondary" id="resetAssumptionsBtn">Reset to Defaults</button>
@@ -209,6 +208,15 @@
 
   <div class="section-title">9. Cost Analysis</div>
   <div class="kpi-grid" id="costGrid"></div>
+  <div class="calc-box" style="margin-top:12px;">
+    <div class="calc-title">Enter overtime hours worked (period)</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:12px;color:var(--gray);">Actual overtime hours worked (total, this period):
+        <input type="number" id="overtimeHoursInput" style="width:110px;" step="0.5" min="0" placeholder="0">
+      </label>
+      <span class="footnote" style="margin:0;">Enter the total overtime hours worked across all staff for the period shown in Daily Data. Overtime cost = hours &times; hourly wage &times; overtime pay multiplier.</span>
+    </div>
+  </div>
   <div class="calc-box" style="margin-top:12px;">
     <div class="calc-title">Set your own cost per unit (optional)</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -297,7 +305,7 @@ let importedFiles = []; // {name, rows, headers, kind, mapping}
 
 /* ============================== ASSUMPTIONS (cost & capacity) ============================== */
 const ASSUMPTIONS_KEY = 'warehouseKpiAssumptions_v1';
-function defaultAssumptions() { return { wage: 15, shiftHours: 8, totalOperatives: 15, otMult: 1.5, otHours: 2, costPerUnit: 0, avgStaffPresentOverride: 0 }; }
+function defaultAssumptions() { return { wage: 15, shiftHours: 8, totalOperatives: 15, otMult: 1.5, actualOvertimeHours: 0, costPerUnit: 0, avgStaffPresentOverride: 0 }; }
 function loadAssumptions() {
   const raw = localStorage.getItem(ASSUMPTIONS_KEY);
   if (raw) { try { return Object.assign(defaultAssumptions(), JSON.parse(raw)); } catch (e) {} }
@@ -1017,10 +1025,10 @@ function updateOrdersCalc(actualPerStaff, totalOperatives) {
 /* ============================== COST ANALYSIS ============================== */
 function renderCost() {
   const days = state.days; const n = days.length;
-  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, otHoursPerShift = assumptions.otHours, totalOperatives = assumptions.totalOperatives;
+  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult;
   const avgStaffPresent = getAvgStaffPresent(days);
 
-  let totalLabor = 0, totalRegularCost = 0, totalOvertimeCost = 0, totalOvertimeHours = 0, totalProcessed = 0;
+  let totalRegularCost = 0, totalProcessed = 0;
   days.forEach(d => {
     // Use this day's own staffPresent figure when it's actually entered;
     // otherwise fall back to the override-aware average from Key Metrics.
@@ -1032,20 +1040,17 @@ function renderCost() {
     const staff = Number(d.staffPresent) > 0 ? Number(d.staffPresent) : avgStaffPresent;
     const processed = Number(d.processed) || 0;
     totalProcessed += processed;
-    const overtimeTriggered = totalOperatives > 0 && staff < totalOperatives;
-    // "Overtime hours (per shift, when triggered)" is the TOTAL overtime
-    // hours worked that day when overtime is triggered — not per staff
-    // member. Not every present staff member necessarily works overtime,
-    // so multiplying this by headcount overstated both overtime cost and
-    // overtime hours (e.g. 20 hours entered became 20 &times; staff count).
-    const overtimeHours = overtimeTriggered ? otHoursPerShift : 0;
     const regularCost = staff * shiftHours * wage;
-    const overtimeCost = overtimeHours * wage * otMult;
-    totalLabor += regularCost + overtimeCost;
     totalRegularCost += regularCost;
-    totalOvertimeCost += overtimeCost;
-    totalOvertimeHours += overtimeHours;
   });
+
+  // Overtime hours worked is entered directly by the customer (Cost Analysis
+  // section) as a single total for the period, rather than derived per-day —
+  // not every present staff member necessarily works overtime, so there's no
+  // reliable way to infer a total OT hours figure from headcount alone.
+  const totalOvertimeHours = Number(assumptions.actualOvertimeHours) || 0;
+  const totalOvertimeCost = totalOvertimeHours * wage * otMult;
+  const totalLabor = totalRegularCost + totalOvertimeCost;
 
   const calculatedCostPerUnit = totalProcessed > 0 ? totalLabor / totalProcessed : 0;
   const overrideCostPerUnit = Number(assumptions.costPerUnit) || 0;
@@ -1054,8 +1059,8 @@ function renderCost() {
 
   document.getElementById('costGrid').innerHTML = [
     kpiCard('Total Labor Cost (period)', '£' + fmt(totalLabor)),
-    kpiCard('Est. Overtime Cost (period)', '£' + fmt(totalOvertimeCost), 'portion of labor cost above'),
-    kpiCard('Actual Overtime Hours Worked', fmt(totalOvertimeHours, 1) + ' hrs', 'total across all staff, this period'),
+    kpiCard('Est. Overtime Cost (period)', '£' + fmt(totalOvertimeCost), 'your entered overtime hours &times; wage &times; multiplier'),
+    kpiCard('Actual Overtime Hours Worked', fmt(totalOvertimeHours, 1) + ' hrs', 'your entered value for this period'),
     kpiCard('Cost per Unit', '£' + fmt(costPerUnit, 2), usingOverride ? 'your entered value' : 'total labor cost ÷ units processed (auto)'),
   ].join('');
 
@@ -1073,9 +1078,9 @@ function bindAssumptionInputs() {
   document.getElementById('asmShiftHours').value = assumptions.shiftHours;
   document.getElementById('asmTotalOperatives').value = assumptions.totalOperatives;
   document.getElementById('asmOtMult').value = assumptions.otMult;
-  document.getElementById('asmOtHours').value = assumptions.otHours;
   document.getElementById('costPerUnitInput').value = assumptions.costPerUnit ? assumptions.costPerUnit : '';
   document.getElementById('avgStaffPresentInput').value = assumptions.avgStaffPresentOverride ? assumptions.avgStaffPresentOverride : '';
+  document.getElementById('overtimeHoursInput').value = assumptions.actualOvertimeHours ? assumptions.actualOvertimeHours : '';
 
   const bind = (id, key) => document.getElementById(id).addEventListener('input', e => {
     assumptions[key] = Number(e.target.value) || 0;
@@ -1086,9 +1091,9 @@ function bindAssumptionInputs() {
   bind('asmShiftHours', 'shiftHours');
   bind('asmTotalOperatives', 'totalOperatives');
   bind('asmOtMult', 'otMult');
-  bind('asmOtHours', 'otHours');
   bind('costPerUnitInput', 'costPerUnit');
   bind('avgStaffPresentInput', 'avgStaffPresentOverride');
+  bind('overtimeHoursInput', 'actualOvertimeHours');
 
   document.getElementById('calcOrdersToday').addEventListener('input', renderStaffing);
 
