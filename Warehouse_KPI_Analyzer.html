@@ -555,6 +555,12 @@ function buildDefaultMapping(headers, kind) {
     // Processed) — auto-populate both so the Daily Data table's Orders
     // Received/Processed/Backlog columns fill in without manual entry.
     m.orderedQty = bestGuessQty(headers, ['ordered']) || '';
+    // These exports have one row per carton, not per order — every carton
+    // belonging to the same order repeats that order's FULL "Ordered Q.ty"
+    // (e.g. an 18-carton order shows "195" on all 18 rows). Summing it per
+    // row would multiply the true ordered total by the carton count, so we
+    // need the order/delivery number to count each order's quantity once.
+    m.orderNumber = bestGuess(headers, ['outbounddelivery','deliverynumber','shipmentnumber','ordernumber','orderno','orderid']) || '';
   } else if (kind === 'orders') {
     m.receivedDate = guessField(headers,'date');
     m.processedDate = bestGuess(headers, ['shipdate','completeddate','fulfilleddate','closeddate']) ;
@@ -611,6 +617,7 @@ function renderFileCards() {
         selectFor('date','Date column'),
         selectFor('qty','Packed/Shipped qty (also used for Orders Processed)'),
         selectFor('orderedQty','Ordered qty (used for Orders Received, optional)'),
+        selectFor('orderNumber','Order/delivery number (dedupes Orders Received, optional)'),
       ].join('');
     } else if (f.kind === 'orders') {
       mappingHtml = [
@@ -680,6 +687,10 @@ function processImportedFiles() {
   let addedRows = 0, skippedRows = 0;
   importedFiles.forEach(f => {
     const m = f.mapping;
+    // Tracks which order/delivery numbers we've already counted toward
+    // Orders Received in THIS file, so a multi-carton order's repeated
+    // "Ordered Q.ty" value is only added once instead of once per carton row.
+    const seenOrderIds = new Set();
     f.rows.forEach(row => {
       if (f.kind === 'summary') {
         const ds = toISODate(row[m.date]);
@@ -701,11 +712,24 @@ function processImportedFiles() {
           day.inbound += val;
         } else {
           day.outbound += val;
-          // Ordered Q.ty = Orders Received; Packed/Shipped qty above doubles
-          // as Orders Processed — fills the Daily Data table's order-pipeline
-          // columns automatically from the same outbound export.
-          if (m.orderedQty) day.received += Number(row[m.orderedQty])||0;
           day.processed += val;
+          // Ordered Q.ty = Orders Received, but it's repeated on every
+          // carton/line belonging to the same order — only add it the
+          // first time we see that order's number, so a multi-carton order
+          // counts once instead of once per carton.
+          if (m.orderedQty) {
+            if (m.orderNumber) {
+              const orderKey = String(row[m.orderNumber] ?? '').trim();
+              if (orderKey && !seenOrderIds.has(orderKey)) {
+                seenOrderIds.add(orderKey);
+                day.received += Number(row[m.orderedQty])||0;
+              }
+            } else {
+              // No order/delivery number column detected — summing Ordered
+              // Q.ty per row would double count on multi-carton orders, so
+              // skip rather than inflate Orders Received.
+            }
+          }
         }
         addedRows++;
       } else if (f.kind === 'orders') {
