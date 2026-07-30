@@ -190,7 +190,6 @@
     <div class="map-field"><label>Standard shift length (hours)</label><input type="number" id="asmShiftHours" step="0.5" min="0"></div>
     <div class="map-field"><label>Overtime pay multiplier</label><input type="number" id="asmOtMult" step="0.1" min="1"></div>
     <div class="map-field"><label>Standard orders / staff / shift</label><input type="number" id="asmCapacity" step="1" min="0"></div>
-    <div class="map-field"><label>Monthly rent / space cost (&pound;)</label><input type="number" id="asmRent" step="10" min="0"></div>
   </div>
 
   <div class="section-title">8. Forecasting</div>
@@ -277,7 +276,7 @@ let importedFiles = []; // {name, rows, headers, kind, mapping}
 
 /* ============================== ASSUMPTIONS (cost & capacity) ============================== */
 const ASSUMPTIONS_KEY = 'warehouseKpiAssumptions_v1';
-function defaultAssumptions() { return { wage: 15, shiftHours: 8, otMult: 1.5, capacity: 40, rent: 4000 }; }
+function defaultAssumptions() { return { wage: 15, shiftHours: 8, otMult: 1.5, capacity: 40 }; }
 function loadAssumptions() {
   const raw = localStorage.getItem(ASSUMPTIONS_KEY);
   if (raw) { try { return Object.assign(defaultAssumptions(), JSON.parse(raw)); } catch (e) {} }
@@ -841,9 +840,9 @@ function renderStaffing() {
 /* ============================== COST ANALYSIS ============================== */
 function renderCost() {
   const days = state.days; const n = days.length;
-  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, capacity = assumptions.capacity, rent = assumptions.rent;
+  const wage = assumptions.wage, shiftHours = assumptions.shiftHours, otMult = assumptions.otMult, capacity = assumptions.capacity;
 
-  let totalLabor = 0, totalOvertime = 0, totalProcessed = 0;
+  let totalLabor = 0, totalRegularCost = 0, totalOvertimeCost = 0, totalOvertimeHours = 0, totalProcessed = 0;
   days.forEach(d => {
     const staff = Number(d.staffPresent) || 0;
     const processed = Number(d.processed) || 0;
@@ -857,28 +856,26 @@ function renderCost() {
     const regularCost = staff * shiftHours * wage;
     const overtimeCost = staff * overtimeHours * wage * otMult;
     totalLabor += regularCost + overtimeCost;
-    totalOvertime += overtimeCost;
+    totalRegularCost += regularCost;
+    totalOvertimeCost += overtimeCost;
+    totalOvertimeHours += staff * overtimeHours;
   });
 
-  const rentAllocated = n > 0 ? rent * (n / 30) : 0;
   const costPerUnit = totalProcessed > 0 ? totalLabor / totalProcessed : 0;
-  const costPerUnitWithRent = totalProcessed > 0 ? (totalLabor + rentAllocated) / totalProcessed : 0;
 
   document.getElementById('costGrid').innerHTML = [
     kpiCard('Total Labor Cost (period)', '£' + fmt(totalLabor)),
-    kpiCard('Est. Overtime Cost (period)', '£' + fmt(totalOvertime), 'portion of labor cost above'),
-    kpiCard('Cost / Unit — Labor Only', '£' + fmt(costPerUnit, 2)),
-    kpiCard('Cost / Unit — incl. Rent', '£' + fmt(costPerUnitWithRent, 2)),
-    kpiCard('Rent Allocated (period)', '£' + fmt(rentAllocated), `${fmt(n)} day(s) of £${fmt(rent)}/mo`),
-    kpiCard('Monthly Rent / Space Cost', '£' + fmt(rent), 'as entered above'),
+    kpiCard('Est. Overtime Cost (period)', '£' + fmt(totalOvertimeCost), 'portion of labor cost above'),
+    kpiCard('Actual Overtime Hours Worked', fmt(totalOvertimeHours, 1) + ' hrs', 'total across all staff, this period'),
+    kpiCard('Cost per Unit', '£' + fmt(costPerUnit, 2), 'total labor cost ÷ units processed'),
   ].join('');
 
   const ctx = document.getElementById('costCompareChart');
   if (costChart) costChart.destroy();
   costChart = new Chart(ctx, {
     type: 'bar',
-    data: { labels: ['Labor Cost (period)', 'Rent Allocated (period)'], datasets: [{ label: 'Cost (£)', data: [totalLabor, rentAllocated], backgroundColor: ['#2e75b6', '#c0392b'] }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Labor vs. Rent/Space Cost' } } }
+    data: { labels: ['Regular Labor Cost', 'Overtime Cost'], datasets: [{ label: 'Cost (£)', data: [totalRegularCost, totalOvertimeCost], backgroundColor: ['#2e75b6', '#c0392b'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Regular vs. Overtime Labor Cost' } } }
   });
 }
 
@@ -887,7 +884,6 @@ function bindAssumptionInputs() {
   document.getElementById('asmShiftHours').value = assumptions.shiftHours;
   document.getElementById('asmOtMult').value = assumptions.otMult;
   document.getElementById('asmCapacity').value = assumptions.capacity;
-  document.getElementById('asmRent').value = assumptions.rent;
 
   const bind = (id, key) => document.getElementById(id).addEventListener('input', e => {
     assumptions[key] = Number(e.target.value) || 0;
@@ -898,7 +894,6 @@ function bindAssumptionInputs() {
   bind('asmShiftHours', 'shiftHours');
   bind('asmOtMult', 'otMult');
   bind('asmCapacity', 'capacity');
-  bind('asmRent', 'rent');
 
   document.getElementById('calcOrders').addEventListener('input', updateCalc);
 }
