@@ -78,6 +78,17 @@
 
   /* REVIEWS */
   .reviews-empty { max-width:520px; margin:32px auto 0; text-align:center; border:1px dashed var(--border); border-radius:14px; padding:32px 24px; color:var(--gray); font-size:14px; background:#fff; }
+  .reviews-grid { display:grid; grid-template-columns: repeat(3,1fr); gap:20px; margin-top:32px; }
+  .review-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:20px; }
+  .review-card .stars { color:#f5a623; font-size:15px; margin-bottom:8px; letter-spacing:1px; }
+  .review-card .name { font-weight:bold; font-size:13.5px; color:var(--blue-dark); margin-bottom:4px; }
+  .review-card p { font-size:13.5px; color:var(--gray); line-height:1.55; margin:0; }
+  .review-form-box { max-width:520px; margin:36px auto 0; background:#fff; border:1px solid var(--border); border-radius:14px; padding:24px; }
+  .review-form-box h3 { font-size:16px; }
+  .review-form-box select, .review-form-box input, .review-form-box textarea {
+    width:100%; padding:11px 13px; border-radius:8px; border:1px solid var(--border); font-family:Arial,sans-serif; font-size:13.5px; margin-bottom:10px; box-sizing:border-box;
+  }
+  .review-form-box textarea { min-height:80px; resize:vertical; }
 
   /* PRICING */
   .pricing-grid { display:grid; grid-template-columns: repeat(2,1fr); max-width: 720px; margin-left:auto; margin-right:auto; gap:20px; margin-top:36px; align-items: stretch; }
@@ -123,7 +134,7 @@
   .disclaimer-banner { background:#fff8e6; border-bottom:1px solid #f0d998; color:#7a5b00; font-size:12px; text-align:center; padding:8px 16px; }
 
   @media (max-width: 860px) {
-    .grid, .steps, .pricing-grid, .about-grid { grid-template-columns: 1fr; }
+    .grid, .steps, .pricing-grid, .about-grid, .reviews-grid { grid-template-columns: 1fr; }
     .contact-box { grid-template-columns: 1fr; }
     .hero h1 { font-size: 30px; }
     .nav-links { display:none; }
@@ -224,9 +235,35 @@
   <div class="wrap">
     <div class="eyebrow center">Reviews</div>
     <h2 class="center">What customers are saying</h2>
-    <p class="lead center">DockPulse just launched, so this space is reserved for real customer reviews as they come in.</p>
-    <div class="reviews-empty">
+    <p class="lead center">Real reviews from signed-in DockPulse customers — no reviews are added by us.</p>
+
+    <div id="reviewsSummary" class="center" style="display:none;margin-top:10px;font-weight:bold;color:var(--blue-dark);"></div>
+    <div id="reviewsList" class="reviews-grid"></div>
+    <div id="reviewsEmpty" class="reviews-empty">
       ⭐ No reviews yet — be one of our first customers and yours could be the first one featured here.
+    </div>
+
+    <div class="review-form-box">
+      <h3>Leave a review</h3>
+      <div id="reviewFormLoggedOut">
+        <p style="font-size:13.5px;color:var(--gray);margin-top:0;">Log in or sign up to leave a review.</p>
+        <button type="button" class="btn outline small" id="reviewLoginPrompt">Log In / Sign Up</button>
+      </div>
+      <form id="reviewForm" style="display:none;">
+        <label style="font-size:13px;font-weight:bold;color:var(--blue-dark);display:block;margin-bottom:6px;">Your rating</label>
+        <select id="reviewRating" required>
+          <option value="">Select a rating</option>
+          <option value="5">★★★★★ (5) Excellent</option>
+          <option value="4">★★★★☆ (4) Good</option>
+          <option value="3">★★★☆☆ (3) Average</option>
+          <option value="2">★★☆☆☆ (2) Poor</option>
+          <option value="1">★☆☆☆☆ (1) Terrible</option>
+        </select>
+        <input type="text" id="reviewName" placeholder="Name to display (optional)" maxlength="60">
+        <textarea id="reviewComment" placeholder="Tell us about your experience with DockPulse" required maxlength="600"></textarea>
+        <button type="submit" class="btn">Submit Review</button>
+        <div class="note" id="reviewStatus"></div>
+      </form>
     </div>
   </div>
 </section>
@@ -379,9 +416,10 @@ function updateNavAccountUI(user) {
 let pendingCheckoutPlan = null;
 
 if (window.netlifyIdentity) {
-  netlifyIdentity.on('init', user => updateNavAccountUI(user));
+  netlifyIdentity.on('init', user => { updateNavAccountUI(user); updateReviewFormUI(user); });
   netlifyIdentity.on('login', user => {
     updateNavAccountUI(user);
+    updateReviewFormUI(user);
     netlifyIdentity.close();
     if (pendingCheckoutPlan) {
       const plan = pendingCheckoutPlan;
@@ -389,7 +427,7 @@ if (window.netlifyIdentity) {
       startCheckout(plan);
     }
   });
-  netlifyIdentity.on('logout', () => updateNavAccountUI(null));
+  netlifyIdentity.on('logout', () => { updateNavAccountUI(null); updateReviewFormUI(null); });
   netlifyIdentity.init();
 
   document.getElementById('navLoginBtn').addEventListener('click', (e) => { e.preventDefault(); netlifyIdentity.open('login'); });
@@ -429,6 +467,106 @@ async function startCheckout(plan) {
     if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
   }
 }
+
+// --- Reviews wiring ---
+function renderReviews(reviews) {
+  const list = document.getElementById('reviewsList');
+  const empty = document.getElementById('reviewsEmpty');
+  const summary = document.getElementById('reviewsSummary');
+  list.innerHTML = '';
+  if (!reviews || reviews.length === 0) {
+    empty.style.display = 'block';
+    summary.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+  summary.textContent = `★ ${avg.toFixed(1)} average from ${reviews.length} review${reviews.length === 1 ? '' : 's'}`;
+  summary.style.display = 'block';
+  reviews.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'review-card';
+    const stars = document.createElement('div');
+    stars.className = 'stars';
+    stars.textContent = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = r.name;
+    const p = document.createElement('p');
+    p.textContent = r.comment;
+    card.appendChild(stars);
+    card.appendChild(name);
+    card.appendChild(p);
+    list.appendChild(card);
+  });
+}
+
+async function loadReviews() {
+  try {
+    const resp = await fetch('/api/reviews');
+    const data = await resp.json();
+    renderReviews(data.reviews || []);
+  } catch (e) {
+    // Network hiccup — the "no reviews yet" placeholder stays visible.
+  }
+}
+loadReviews();
+
+function updateReviewFormUI(user) {
+  const loggedOut = document.getElementById('reviewFormLoggedOut');
+  const form = document.getElementById('reviewForm');
+  if (!loggedOut || !form) return;
+  if (user) {
+    loggedOut.style.display = 'none';
+    form.style.display = 'block';
+  } else {
+    loggedOut.style.display = 'block';
+    form.style.display = 'none';
+  }
+}
+
+document.getElementById('reviewLoginPrompt').addEventListener('click', () => {
+  if (window.netlifyIdentity) netlifyIdentity.open('login');
+});
+
+document.getElementById('reviewForm').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const user = window.netlifyIdentity && netlifyIdentity.currentUser();
+  const statusEl = document.getElementById('reviewStatus');
+  if (!user) { netlifyIdentity.open('login'); return; }
+
+  const rating = Number(document.getElementById('reviewRating').value);
+  const name = document.getElementById('reviewName').value.trim();
+  const comment = document.getElementById('reviewComment').value.trim();
+  if (!rating || !comment) return;
+
+  const submitBtn = this.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Submitting…';
+  statusEl.textContent = '';
+  statusEl.style.color = '';
+
+  try {
+    const token = await user.jwt();
+    const resp = await fetch('/api/reviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ rating, name, comment }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Could not submit review.');
+    renderReviews(data.reviews);
+    statusEl.style.color = 'var(--teal-dark)';
+    statusEl.textContent = "Thanks — your review is live!";
+    this.reset();
+  } catch (err) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = err.message || 'Something went wrong. Please try again.';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Review';
+  }
+});
 
 // --- Post-checkout banner (?checkout=success / ?checkout=cancelled) ---
 (function showCheckoutBanner() {
