@@ -140,6 +140,15 @@
 
   <div class="section-title">2. Key Metrics</div>
   <div class="kpi-grid" id="kpiGrid"></div>
+  <div class="calc-box" style="margin-top:12px;">
+    <div class="calc-title">Set Avg Staff Present manually (optional)</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:12px;color:var(--gray);">Avg Staff Present:
+        <input type="number" id="avgStaffPresentInput" style="width:110px;" step="0.1" min="0" placeholder="auto">
+      </label>
+      <span class="footnote" style="margin:0;">Leave blank to auto-calculate from Daily Data below. Also feeds the Alerts and Staffing &amp; Overtime sections, so they all stay in sync.</span>
+    </div>
+  </div>
 
   <div class="section-title">3. Automated Alerts (rule-based, instant)</div>
   <div class="alerts" id="alertsGrid"></div>
@@ -304,7 +313,7 @@ let importedFiles = []; // {name, rows, headers, kind, mapping}
 
 /* ============================== ASSUMPTIONS (cost & capacity) ============================== */
 const ASSUMPTIONS_KEY = 'warehouseKpiAssumptions_v1';
-function defaultAssumptions() { return { wage: 15, shiftHours: 8, totalOperatives: 15, otMult: 1.5, otHours: 2, costPerUnit: 0 }; }
+function defaultAssumptions() { return { wage: 15, shiftHours: 8, totalOperatives: 15, otMult: 1.5, otHours: 2, costPerUnit: 0, avgStaffPresentOverride: 0 }; }
 function loadAssumptions() {
   const raw = localStorage.getItem(ASSUMPTIONS_KEY);
   if (raw) { try { return Object.assign(defaultAssumptions(), JSON.parse(raw)); } catch (e) {} }
@@ -312,6 +321,18 @@ function loadAssumptions() {
 }
 function saveAssumptions() { localStorage.setItem(ASSUMPTIONS_KEY, JSON.stringify(assumptions)); }
 let assumptions = loadAssumptions();
+// Avg Staff Present can be entered manually (Key Metrics section) instead of
+// always being computed from the Daily Data table below — useful when the
+// day-by-day staffPresent entries don't reflect a warehouse's true average
+// headcount. Every section that reports "Avg Staff Present" (Key Metrics,
+// Alerts, Staffing & Overtime) reads through this one helper so they all stay
+// consistent with whichever value is currently in effect.
+function getAvgStaffPresent(days) {
+  const override = Number(assumptions.avgStaffPresentOverride) || 0;
+  if (override > 0) return override;
+  const sum = days.reduce((s, d) => s + (Number(d.staffPresent) || 0), 0);
+  return days.length ? sum / days.length : 0;
+}
 
 /* ============================== SHIFT HANDOVER NOTES ============================== */
 const HANDOVER_KEY = 'warehouseKpiHandover_v1';
@@ -836,7 +857,8 @@ function renderKpis() {
   const sum = (arr, f) => arr.reduce((s,d)=> s + (Number(d[f])||0), 0);
   const avg = (arr, f) => arr.length ? sum(arr,f)/arr.length : 0;
   const avgOrdersDay = avg(days, 'processed');
-  const avgStaffPresent = avg(days, 'staffPresent');
+  const avgStaffPresent = getAvgStaffPresent(days);
+  const usingStaffPresentOverride = Number(assumptions.avgStaffPresentOverride) > 0;
   const avgStaffSched = avg(days, 'staffSched');
   const avgPerStaff = (() => {
     const vals = days.filter(d => Number(d.staffPresent) > 0).map(d => Number(d.processed)/Number(d.staffPresent));
@@ -848,7 +870,7 @@ function renderKpis() {
     kpiCard('Inbound Today', last ? fmt(last.inbound) : '--', 'Most recent day on file'),
     kpiCard('Outbound Today', last ? fmt(last.outbound) : '--', 'Most recent day on file'),
     kpiCard('Orders Left to Process', fmt(currentBacklog), 'Current backlog', currentBacklog > (n>1?backlogs[n-2]:state.startBacklog) ? 'warn':'ok'),
-    kpiCard('Avg Staff Present', fmt(avgStaffPresent,1), `of ${fmt(avgStaffSched,1)} scheduled`),
+    kpiCard('Avg Staff Present', fmt(avgStaffPresent,1), usingStaffPresentOverride ? 'your entered value' : `of ${fmt(avgStaffSched,1)} scheduled`),
     kpiCard('Inbound This Week', fmt(sum(weekDays,'inbound')), `last ${weekDays.length} day(s)`),
     kpiCard('Outbound This Week', fmt(sum(weekDays,'outbound')), `last ${weekDays.length} day(s)`),
     kpiCard('Inbound This Month', fmt(sum(days,'inbound')), `all ${n} day(s) on file`),
@@ -871,7 +893,7 @@ function renderAlerts() {
     const vals = days.filter(d=>Number(d.staffPresent)>0).map(d=>Number(d.processed)/Number(d.staffPresent));
     return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
   })();
-  const avgStaffPresent = days.length ? sum(days,'staffPresent')/days.length : 0;
+  const avgStaffPresent = getAvgStaffPresent(days);
   const avgStaffSched = days.length ? sum(days,'staffSched')/days.length : 0;
   const outboundTotal = sum(days,'outbound'); const inboundTotal = sum(days,'inbound');
 
@@ -953,7 +975,7 @@ function renderStaffing() {
   const days = state.days; const n = days.length;
   const sum = (arr, f) => arr.reduce((s, d) => s + (Number(d[f]) || 0), 0);
   const avgOrdersDay = n ? sum(days, 'processed') / n : 0;
-  const avgStaffPresent = n ? sum(days, 'staffPresent') / n : 0;
+  const avgStaffPresent = getAvgStaffPresent(days);
   const totalOperatives = assumptions.totalOperatives;
   const actualPerStaff = avgStaffPresent > 0 ? avgOrdersDay / avgStaffPresent : 0;
   const gap = totalOperatives - avgStaffPresent;
@@ -1039,6 +1061,7 @@ function bindAssumptionInputs() {
   document.getElementById('asmOtMult').value = assumptions.otMult;
   document.getElementById('asmOtHours').value = assumptions.otHours;
   document.getElementById('costPerUnitInput').value = assumptions.costPerUnit ? assumptions.costPerUnit : '';
+  document.getElementById('avgStaffPresentInput').value = assumptions.avgStaffPresentOverride ? assumptions.avgStaffPresentOverride : '';
 
   const bind = (id, key) => document.getElementById(id).addEventListener('input', e => {
     assumptions[key] = Number(e.target.value) || 0;
@@ -1051,6 +1074,7 @@ function bindAssumptionInputs() {
   bind('asmOtMult', 'otMult');
   bind('asmOtHours', 'otHours');
   bind('costPerUnitInput', 'costPerUnit');
+  bind('avgStaffPresentInput', 'avgStaffPresentOverride');
 
   document.getElementById('calcOrdersToday').addEventListener('input', renderStaffing);
 
