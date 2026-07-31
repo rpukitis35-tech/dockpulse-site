@@ -146,6 +146,7 @@
 <body>
 
 <div id="checkoutBanner" style="display:none;position:sticky;top:0;z-index:100;text-align:center;padding:12px 16px;font-weight:bold;font-size:14px;"></div>
+<div id="confirmingBanner" style="display:none;position:sticky;top:0;z-index:100;text-align:center;padding:12px 16px;font-weight:bold;font-size:14px;background:#1f4e78;color:#fff;">Confirming your account…</div>
 
 <nav>
   <div class="wrap">
@@ -226,7 +227,10 @@
         <span>DockPulse — Warehouse KPI Analyzer</span>
         <a href="Warehouse_KPI_Analyzer.html" target="_blank" style="color:#fff;">Open Full Screen ↗</a>
       </div>
-      <iframe class="demo" src="Warehouse_KPI_Analyzer.html" title="DockPulse Warehouse KPI Analyzer" onerror="this.style.display='none'"></iframe>
+      <div id="demoPlaceholder" style="padding:60px 24px;text-align:center;background:#f7f9fb;">
+        <p style="color:var(--gray);font-size:14px;margin:0 0 16px;">The live analyzer loads a full interactive dashboard (charts, spreadsheet parsing) — click below to load it here, or open it full screen.</p>
+        <button type="button" class="btn" id="loadDemoBtn">▶ Load Interactive Demo</button>
+      </div>
     </div>
   </div>
 </section>
@@ -383,6 +387,22 @@
 </footer>
 
 <script>
+// The embedded analyzer demo is heavy (loads its own charting/spreadsheet
+// libraries and runs a full render pass) — it only loads once someone
+// explicitly asks for it, instead of on every homepage visit. This matters
+// most right after email confirmation redirects back to this page, and on
+// constrained in-app browsers (e.g. email-client webviews), where forcing
+// that extra load immediately could stall the page.
+document.getElementById('loadDemoBtn').addEventListener('click', function () {
+  const placeholder = document.getElementById('demoPlaceholder');
+  const iframe = document.createElement('iframe');
+  iframe.className = 'demo';
+  iframe.src = 'Warehouse_KPI_Analyzer.html';
+  iframe.title = 'DockPulse Warehouse KPI Analyzer';
+  iframe.onerror = function () { this.style.display = 'none'; };
+  placeholder.replaceWith(iframe);
+});
+
 document.getElementById('leadForm').addEventListener('submit', function(e){
   e.preventDefault();
   const name = document.getElementById('lf-name').value.trim();
@@ -415,9 +435,25 @@ function updateNavAccountUI(user) {
 
 let pendingCheckoutPlan = null;
 
+// Confirming a signed-up email (clicking the link in the confirmation email)
+// lands back here with #confirmation_token=... in the URL, and Netlify
+// Identity processes that silently in the background — with no visual
+// feedback, that gap can look identical to the page being unresponsive,
+// especially if it takes more than a second or two. Show a clear banner for
+// that specific case so it's obvious something is happening.
+const confirmingBanner = document.getElementById('confirmingBanner');
+if (window.location.hash.includes('confirmation_token')) {
+  confirmingBanner.style.display = 'block';
+}
+
 if (window.netlifyIdentity) {
-  netlifyIdentity.on('init', user => { updateNavAccountUI(user); updateReviewFormUI(user); });
+  netlifyIdentity.on('init', user => {
+    confirmingBanner.style.display = 'none';
+    updateNavAccountUI(user);
+    updateReviewFormUI(user);
+  });
   netlifyIdentity.on('login', user => {
+    confirmingBanner.style.display = 'none';
     updateNavAccountUI(user);
     updateReviewFormUI(user);
     netlifyIdentity.close();
@@ -428,6 +464,16 @@ if (window.netlifyIdentity) {
     }
   });
   netlifyIdentity.on('logout', () => { updateNavAccountUI(null); updateReviewFormUI(null); });
+  netlifyIdentity.on('error', err => {
+    // Most commonly hit if a confirmation link was already used (e.g. an
+    // email security scanner like Outlook Safe Links pre-visiting the link
+    // before the person actually clicks it) — surface it instead of leaving
+    // the page looking stuck with no explanation.
+    confirmingBanner.style.display = 'none';
+    if (window.location.hash.includes('confirmation_token')) {
+      alert('This confirmation link didn\'t go through (it may have already been used, or expired). If you already tried clicking it once, try logging in directly — your account may already be confirmed. Otherwise, sign up again to get a fresh link.');
+    }
+  });
   netlifyIdentity.init();
 
   document.getElementById('navLoginBtn').addEventListener('click', (e) => { e.preventDefault(); netlifyIdentity.open('login'); });
