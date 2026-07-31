@@ -143,16 +143,31 @@
     </div>
   </div>
 
-  <div class="section-title">3. Automated Alerts (rule-based, instant)</div>
+  <div class="section-title">3. Productivity Matrix</div>
+  <div class="kpi-grid" id="productivityGrid"></div>
+  <div class="table-wrap" style="margin-top:12px;">
+  <table>
+    <thead>
+      <tr>
+        <th>Week</th><th>Date Range</th><th>Inbound + Outbound<br>(units)</th>
+        <th>Hours Worked</th><th>Productivity<br>(units/hr)</th>
+      </tr>
+    </thead>
+    <tbody id="productivityWeekBody"></tbody>
+  </table>
+  </div>
+  <p class="footnote">Productivity = (Inbound + Outbound units) &divide; Staff Hours. Weeks below are grouped into 7-day blocks starting from the first day in your Daily Data table, so you can see productivity trend from one week to the next.</p>
+
+  <div class="section-title">4. Automated Alerts (rule-based, instant)</div>
   <div class="alerts" id="alertsGrid"></div>
 
-  <div class="section-title">4. Trends</div>
+  <div class="section-title">5. Trends</div>
   <div class="charts">
     <div class="chart-card"><canvas id="ioChart"></canvas></div>
     <div class="chart-card"><canvas id="backlogChart"></canvas></div>
   </div>
 
-  <div class="section-title">5. Daily Data (imported + editable)</div>
+  <div class="section-title">6. Daily Data (imported + editable)</div>
   <p class="footnote">Starting backlog (orders open before the first row below):
     <input id="startBacklog" type="number" style="width:70px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:2px;">
   </p>
@@ -162,8 +177,8 @@
       <tr>
         <th>Date</th><th>Inbound<br>Received</th><th>Outbound<br>Shipped</th>
         <th>Orders<br>Received</th><th>Orders<br>Processed</th>
-        <th>Backlog<br>(Orders Left)</th><th>Staff<br>Scheduled</th>
-        <th>Staff<br>Present</th><th>Orders /<br>Staff</th><th></th>
+        <th>Backlog<br>(Orders Left)</th>
+        <th>Staff<br>Hours</th><th>Daily Inbound<br>Productivity</th><th></th>
       </tr>
     </thead>
     <tbody id="dataBody"></tbody>
@@ -176,7 +191,7 @@
   </div>
   <p class="footnote">Data is saved automatically in this browser (persists on reload). "This Week" = most recent 7 rows below; "This Month" = all rows in the table. Nothing you upload leaves your browser &mdash; files are parsed locally.</p>
 
-  <div class="section-title">6. Cost &amp; Capacity Assumptions</div>
+  <div class="section-title">7. Cost &amp; Capacity Assumptions</div>
   <p class="footnote">Set these once &mdash; they power the forecasting, staffing, and cost sections below, and are saved automatically in this browser.</p>
   <div class="map-grid" style="margin-bottom:10px;">
     <div class="map-field"><label>Hourly wage per staff (&pound;)</label><input type="number" id="asmWage" step="0.5" min="0"></div>
@@ -189,11 +204,11 @@
   </div>
   <p class="footnote">If any of the numbers above look far too large or too small, click "Reset to Defaults" and re-enter them.</p>
 
-  <div class="section-title">7. Forecasting</div>
+  <div class="section-title">8. Forecasting</div>
   <div class="kpi-grid" id="forecastGrid"></div>
   <p class="footnote" id="forecastNote"></p>
 
-  <div class="section-title">8. Staffing &amp; Overtime Planning</div>
+  <div class="section-title">9. Staffing &amp; Overtime Planning</div>
   <div class="kpi-grid" id="staffingGrid"></div>
   <div class="alerts" id="overtimeAlert" style="margin-top:10px;"></div>
   <div class="calc-box">
@@ -206,7 +221,7 @@
     </div>
   </div>
 
-  <div class="section-title">9. Cost Analysis</div>
+  <div class="section-title">10. Cost Analysis</div>
   <div class="kpi-grid" id="costGrid"></div>
   <div class="calc-box" style="margin-top:12px;">
     <div class="calc-title">Enter overtime hours worked (period)</div>
@@ -230,7 +245,7 @@
     <div class="chart-card"><canvas id="costCompareChart"></canvas></div>
   </div>
 
-  <div class="section-title">10. Shift Handover Notes</div>
+  <div class="section-title">11. Shift Handover Notes</div>
   <p class="footnote">Log what the next shift needs to know &mdash; backlog status, equipment issues, staffing changes, anything unfinished.</p>
   <div class="handover-form">
     <div class="map-field">
@@ -281,12 +296,14 @@ function sampleData() {
   const outbound = [420,470,410,450,400,260,250,480,470,420,430,240,250,440];
   const received = [500,520,510,540,480,310,300,530,560,520,540,310,320,580];
   const processed = [430,480,420,460,410,270,260,490,480,430,440,250,260,450];
-  const staffSched = [14,14,14,14,14,8,8,14,14,14,14,8,8,14];
+  // Sample staff headcount, converted to total daily labor hours (headcount &times;
+  // an 8-hour shift) so the sample data lines up with the Staff Hours column below.
   const staffPresent = [13,14,13,14,12,8,7,13,12,11,13,8,7,12];
+  const staffHours = staffPresent.map(p => p * 8);
   for (let i=0;i<14;i++){
     const d = new Date(start); d.setDate(start.getDate()+i);
     days.push({ date: localISO(d), inbound: inbound[i], outbound: outbound[i],
-      received: received[i], processed: processed[i], staffSched: staffSched[i], staffPresent: staffPresent[i] });
+      received: received[i], processed: processed[i], staffHours: staffHours[i] });
   }
   return days;
 }
@@ -648,7 +665,6 @@ function renderFileCards() {
     }
 
     const kindOptions = Object.keys(KIND_LABELS).map(k => `<option value="${k}" ${f.kind===k?'selected':''}>${KIND_LABELS[k]}</option>`).join('');
-
     card.innerHTML = `
       <div class="file-card-head">
         <div><div class="name">${f.name}</div><div class="meta">${f.rows.length} rows &middot; ${f.headers.length} columns detected</div></div>
@@ -795,7 +811,7 @@ function computeBacklogs() {
 }
 
 function render() {
-  renderTable(); renderKpis(); renderAlerts(); renderCharts();
+  renderTable(); renderKpis(); renderProductivity(); renderAlerts(); renderCharts();
   renderForecast(); renderStaffing(); renderCost(); renderHandover();
 }
 
@@ -805,9 +821,13 @@ function renderTable() {
   const tbody = document.getElementById('dataBody');
   tbody.innerHTML = '';
   state.days.forEach((d, i) => {
-    const staffPresentNum = Number(d.staffPresent) || 0;
-    const processedNum = Number(d.processed) || 0;
-    const perStaff = staffPresentNum > 0 ? (processedNum / staffPresentNum) : null;
+    // Daily Inbound Productivity = that day's inbound units &divide; Staff Hours
+    // worked that day (total labor hours, not headcount) — a direct read of how
+    // many inbound units each labor-hour produced, independent of how many
+    // people happened to be on shift.
+    const staffHoursNum = Number(d.staffHours) || 0;
+    const inboundNum = Number(d.inbound) || 0;
+    const inboundProductivity = staffHoursNum > 0 ? (inboundNum / staffHoursNum) : null;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="date" value="${d.date||''}" data-i="${i}" data-f="date"></td>
@@ -816,9 +836,8 @@ function renderTable() {
       <td><input type="number" value="${d.received ?? ''}" data-i="${i}" data-f="received"></td>
       <td><input type="number" value="${d.processed ?? ''}" data-i="${i}" data-f="processed"></td>
       <td style="font-weight:bold;color:var(--blue-dark)">${fmt(backlogs[i])}</td>
-      <td><input type="number" value="${d.staffSched ?? ''}" data-i="${i}" data-f="staffSched"></td>
-      <td><input type="number" value="${d.staffPresent ?? ''}" data-i="${i}" data-f="staffPresent"></td>
-      <td>${perStaff !== null ? fmt(perStaff,1) : '--'}</td>
+      <td><input type="number" value="${d.staffHours ?? ''}" data-i="${i}" data-f="staffHours" step="0.5"></td>
+      <td>${inboundProductivity !== null ? fmt(inboundProductivity,2) : '--'}</td>
       <td><button class="del-btn" data-i="${i}" title="Delete row">&times;</button></td>
     `;
     tbody.appendChild(tr);
@@ -889,6 +908,60 @@ function renderKpis() {
     kpiCard('Avg Outbound / Month', n >= 30 ? fmt(avgOutboundDay*30,1) : '--', n >= 30 ? 'avg/day &times; 30' : `need ${30-n} more day(s) of data`),
     kpiCard('Outbound Orders per Staff (Avg)', fmt(avgOutboundPerStaff,1), 'avg outbound &divide; avg staff present'),
   ].join('');
+}
+
+/* ============================== PRODUCTIVITY MATRIX ============================== */
+// Productivity here always means (Inbound + Outbound units) &divide; Staff Hours
+// worked over the same period — a labor-hour productivity figure, independent of
+// headcount. "Daily" = the most recent day on file, "Weekly" = the most recent 7
+// days, "Monthly" = all days on file (matching the "This Week"/"This Month"
+// convention already used in the Daily Data table below).
+function renderProductivity() {
+  const days = state.days; const n = days.length;
+  const sum = (arr, f) => arr.reduce((s, d) => s + (Number(d[f]) || 0), 0);
+  const ioUnits = arr => sum(arr, 'inbound') + sum(arr, 'outbound');
+  const hoursWorked = arr => sum(arr, 'staffHours');
+  const productivityOf = arr => { const h = hoursWorked(arr); return h > 0 ? ioUnits(arr) / h : null; };
+
+  const lastDay = n > 0 ? [days[n - 1]] : [];
+  const weekDays = days.slice(Math.max(0, n - 7));
+
+  const dailyProd = productivityOf(lastDay);
+  const weeklyProd = productivityOf(weekDays);
+  const monthlyProd = productivityOf(days);
+
+  document.getElementById('productivityGrid').innerHTML = [
+    kpiCard('Daily Productivity', dailyProd !== null ? fmt(dailyProd, 2) + ' units/hr' : '--', n > 0 ? 'most recent day on file' : 'no data yet'),
+    kpiCard('Weekly Productivity', weeklyProd !== null ? fmt(weeklyProd, 2) + ' units/hr' : '--', `last ${weekDays.length} day(s)`),
+    kpiCard('Monthly Productivity', monthlyProd !== null ? fmt(monthlyProd, 2) + ' units/hr' : '--', `all ${n} day(s) on file`),
+  ].join('');
+
+  // Break the full date range into consecutive 7-day blocks (Week 1, Week 2, ...)
+  // so productivity trend from one week to the next is clearly visible, rather
+  // than buried in a single all-time average.
+  const weeks = [];
+  for (let i = 0; i < days.length; i += 7) {
+    const chunk = days.slice(i, i + 7);
+    const chunkProd = productivityOf(chunk);
+    weeks.push({
+      num: weeks.length + 1,
+      start: chunk[0].date,
+      end: chunk[chunk.length - 1].date,
+      io: ioUnits(chunk),
+      hours: hoursWorked(chunk),
+      prod: chunkProd,
+    });
+  }
+  const weekBody = document.getElementById('productivityWeekBody');
+  weekBody.innerHTML = weeks.length ? weeks.map(w => `
+    <tr>
+      <td style="font-weight:bold;color:var(--blue-dark)">Week ${w.num}</td>
+      <td>${w.start}${w.end !== w.start ? ' &ndash; ' + w.end : ''}</td>
+      <td>${fmt(w.io)}</td>
+      <td>${fmt(w.hours, 1)}</td>
+      <td style="font-weight:bold;color:var(--blue-dark)">${w.prod !== null ? fmt(w.prod, 2) + ' units/hr' : '--'}</td>
+    </tr>
+  `).join('') : `<tr><td colspan="5" style="color:#8a8a8a;font-style:italic;">No data yet &mdash; add daily data below.</td></tr>`;
 }
 
 function renderAlerts() {
@@ -1158,7 +1231,7 @@ document.getElementById('addRowBtn').addEventListener('click', () => {
   const last = state.days[state.days.length-1];
   const d = last ? new Date(last.date) : new Date();
   if (last) d.setDate(d.getDate()+1);
-  state.days.push({ date: localISO(d), inbound:0, outbound:0, received:0, processed:0, staffSched:0, staffPresent:0 });
+  state.days.push({ date: localISO(d), inbound:0, outbound:0, received:0, processed:0, staffHours:0 });
   saveData(); render();
 });
 document.getElementById('clearBtn').addEventListener('click', () => {
